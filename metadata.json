@@ -1,0 +1,6 @@
+{
+  "name": "PageForge AI",
+  "description": "An AI-powered tool by Nion to measure, analyze, clean, and compare your website's performance. PageForge AI uses Gemini and PageSpeed Insights to provide actionable recommendations and optimize your HTML.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
