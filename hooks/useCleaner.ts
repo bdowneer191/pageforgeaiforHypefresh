@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { rewriteToSemanticHtml } from '../services/geminiService.ts';
 import { CleaningOptions, ImpactSummary, Recommendation } from '../types.ts';
@@ -180,13 +181,32 @@ const processEmbeds = (doc: Document, options: CleaningOptions) => {
         placeholder.innerHTML = `<div style="pointer-events: none;">${tkIconSvg}<p style="font-size: 14px; margin: 0; font-weight: 500; color: #d1d5db;">View on TikTok</p><p style="font-size: 12px; color: #6b7280; margin: 4px 0 0;">Click to load this video</p></div>`;
         tkQuote.parentNode?.replaceChild(placeholder, tkQuote);
     });
+
+    let redditFound = false;
+    doc.querySelectorAll('blockquote.reddit-embed-bq').forEach(rdQuote => {
+        const postLink = rdQuote.querySelector('a[href*="/r/"]');
+        if (!postLink) return;
+
+        const postUrl = postLink.getAttribute('href');
+        if (!postUrl) return;
+
+        redditFound = true;
+        const placeholder = doc.createElement('div');
+        placeholder.className = 'lazy-reddit-facade';
+        placeholder.setAttribute('data-post-url', postUrl);
+
+        const rdIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 32px; height: 32px; margin: 0 auto 8px; color: #FF4500;"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.825 13.333c0 .552-.447 1-1 1s-1-.448-1-1v-2.333c0-.552.447-1 1-1s1 .448 1 1v2.333zm-6.65 2.5a1.167 1.167 0 110-2.333 1.167 1.167 0 010 2.333zm-4-2.5c0 .552-.447 1-1 1s-1-.448-1-1v-2.333c0-.552.447-1 1-1s1 .448 1 1v2.333zm.125-5.333c-.736 0-1.333.597-1.333 1.333s.597 1.333 1.333 1.333c.737 0 1.333-.597 1.333-1.333s-.596-1.333-1.333-1.333zm6.667 0c-.737 0-1.333.597-1.333 1.333s.596 1.333 1.333 1.333c.736 0 1.333-.597 1.333-1.333s-.597-1.333-1.333-1.333z"/><path d="M12 4.167c-1.38 0-2.5 1.12-2.5 2.5s1.12 2.5 2.5 2.5 2.5-1.12 2.5-2.5-1.12-2.5-2.5-2.5zm0 13.666c-3.308 0-6-2.692-6-6s2.692-6 6-6 6 2.692 6 6-2.692 6-6 6z" opacity=".3"/><path d="M12 17.833c3.308 0 6-2.692 6-6s-2.692-6-6-6-6 2.692-6 6 2.692 6 6 6zm-4.375-7c.736 0 1.333-.597 1.333-1.333S8.361 8.167 7.625 8.167c-.737 0-1.333.597-1.333 1.333s.596 1.333 1.333 1.333zm8.75 0c.737 0 1.333-.597 1.333-1.333s-.596-1.333-1.333-1.333c-.736 0-1.333.597-1.333 1.333s.597 1.333 1.333 1.333zm-4.375 4.834a1.167 1.167 0 100 2.333 1.167 1.167 0 000-2.333zm5.475-4.834v2.333c0 .552.447 1 1 1s1-.448 1-1v-2.333c0-.552-.447-1-1-1s-1 .448-1 1zm-10.95 0v2.333c0 .552.447 1 1 1s1-.448 1-1v-2.333c0-.552-.447-1-1-1s-1 .448-1 1z"/></svg>`;
+        placeholder.innerHTML = `<div style="pointer-events: none;">${rdIconSvg}<p style="font-size: 14px; margin: 0; font-weight: 500; color: #d1d5db;">View on Reddit</p><p style="font-size: 12px; color: #6b7280; margin: 4px 0 0;">Click to load this post</p></div>`;
+        rdQuote.parentNode?.replaceChild(placeholder, rdQuote);
+    });
     
     // Remove original embed scripts if we've replaced their blockquotes
     if (twitterFound) doc.querySelectorAll('script[src*="platform.twitter.com/widgets.js"]').forEach(s => s.remove());
     if (instagramFound) doc.querySelectorAll('script[src*="instagram.com/embed.js"]').forEach(s => s.remove());
     if (tiktokFound) doc.querySelectorAll('script[src*="tiktok.com/embed.js"]').forEach(s => s.remove());
+    if (redditFound) doc.querySelectorAll('script[src*="embed.redditmedia.com/widgets.js"]').forEach(s => s.remove());
 
-    const hasFacades = youtubeFound || twitterFound || instagramFound || tiktokFound;
+    const hasFacades = youtubeFound || twitterFound || instagramFound || tiktokFound || redditFound;
     
     if (hasFacades && !doc.querySelector('#pageforge-facade-script')) {
         const facadeScript = doc.createElement('script');
@@ -208,7 +228,7 @@ const processEmbeds = (doc: Document, options: CleaningOptions) => {
             }
 
             document.addEventListener('click', function(event) {
-                const target = event.target.closest('.lazy-youtube-facade, .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade');
+                const target = event.target.closest('.lazy-youtube-facade, .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade, .lazy-reddit-facade');
                 if (!target) return;
 
                 if (target.matches('.lazy-youtube-facade') && !target.dataset.loaded) {
@@ -292,6 +312,30 @@ const processEmbeds = (doc: Document, options: CleaningOptions) => {
                     
                     loadScript('https://www.tiktok.com/embed.js', 'tiktok-wjs');
                 }
+                
+                else if (target.matches('.lazy-reddit-facade') && !target.dataset.loading) {
+                    target.dataset.loading = 'true';
+                    const postUrl = target.dataset.postUrl;
+                    if (!postUrl) return;
+
+                    target.style.cursor = 'default';
+                    target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center;">Loading Reddit Post...</p>';
+
+                    const blockquote = document.createElement('blockquote');
+                    blockquote.className = 'reddit-embed-bq';
+                    blockquote.setAttribute('data-embed-height', '500'); 
+                    
+                    const link = document.createElement('a');
+                    link.href = postUrl;
+                    link.textContent = postUrl;
+                    blockquote.appendChild(link);
+                    
+                    target.innerHTML = '';
+                    target.style.cssText = 'border: none; padding: 0; background-color: transparent; min-height: 200px;';
+                    target.appendChild(blockquote);
+                    
+                    loadScript('https://embed.redditmedia.com/widgets/platform.js', 'reddit-wjs');
+                }
             });
         `;
         doc.body.appendChild(facadeScript);
@@ -303,8 +347,8 @@ const processEmbeds = (doc: Document, options: CleaningOptions) => {
             .lazy-youtube-facade .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 68px; height: 48px; background: rgba(0,0,0,0.6); border-radius: 10px; pointer-events: none; }
             .lazy-youtube-facade .play-button::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-40%, -50%); border-style: solid; border-width: 12px 0 12px 20px; border-color: transparent transparent transparent white; }
             .lazy-youtube-facade:hover .play-button { background: rgba(255,0,0,0.8); }
-            .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade { border: 1px solid #374151; border-radius: 12px; padding: 16px; background-color: #1f2937; color: #9ca3af; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; cursor: pointer; font-family: sans-serif; margin: 1rem auto; transition: background-color 0.2s; max-width: 540px; }
-            .lazy-twitter-facade:hover, .lazy-instagram-facade:hover, .lazy-tiktok-facade:hover { background-color: #374151; }
+            .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade, .lazy-reddit-facade { border: 1px solid #374151; border-radius: 12px; padding: 16px; background-color: #1f2937; color: #9ca3af; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; cursor: pointer; font-family: sans-serif; margin: 1rem auto; transition: background-color 0.2s; max-width: 540px; }
+            .lazy-twitter-facade:hover, .lazy-instagram-facade:hover, .lazy-tiktok-facade:hover, .lazy-reddit-facade:hover { background-color: #374151; }
         `;
         doc.body.appendChild(facadeStyles);
     }
@@ -440,17 +484,33 @@ export const useCleaner = () => {
             processImages(doc, effectiveOptions);
             processEmbeds(doc, effectiveOptions);
             optimizeLoading(doc, effectiveOptions);
+            
+            // Extract facade script and styles to protect them from the AI rewrite step.
+            const facadeScriptEl = doc.getElementById('pageforge-facade-script');
+            const facadeStyleEl = doc.getElementById('pageforge-facade-style');
+            const facadeScriptHtml = facadeScriptEl ? facadeScriptEl.outerHTML : '';
+            const facadeStyleHtml = facadeStyleEl ? facadeStyleEl.outerHTML : '';
 
-            let finalHtml = doc.body.innerHTML;
+            // Remove them from the doc before getting the innerHTML for the AI
+            facadeScriptEl?.remove();
+            facadeStyleEl?.remove();
 
-            // AI-powered rewrite is the last step
+            let htmlForRewrite = doc.body.innerHTML;
+
+            // AI-powered rewrite is a subsequent step
             if (effectiveOptions.semanticRewrite && geminiApiKey) {
-                finalHtml = await rewriteToSemanticHtml(geminiApiKey, finalHtml);
+                htmlForRewrite = await rewriteToSemanticHtml(geminiApiKey, htmlForRewrite);
             }
 
+            // Combine the rewritten HTML with the preserved facade code.
+            const finalHtml = htmlForRewrite + facadeStyleHtml + facadeScriptHtml;
+
+
             const cleanedBytes = new TextEncoder().encode(finalHtml).length;
-            const finalDoc = parser.parseFromString(finalHtml, 'text/html');
-            const cleanedNodeCount = finalDoc.querySelectorAll('*').length;
+            // To get an accurate node count, we need to parse the final HTML again,
+            // but this time without the script/style tags if we don't want to count them.
+            const finalDocForCount = parser.parseFromString(htmlForRewrite, 'text/html');
+            const cleanedNodeCount = finalDocForCount.querySelectorAll('*').length;
             
             const summary: ImpactSummary = {
                 originalBytes,
