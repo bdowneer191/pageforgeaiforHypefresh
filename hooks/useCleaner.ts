@@ -53,30 +53,17 @@ const processEmbeds = (doc: Document) => {
 
     // --- LAZY-LOADING PASS ---
 
-    // YouTube
-    const youtubeIframes = doc.querySelectorAll('iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]');
-    youtubeIframes.forEach(iframe => {
+    // YouTube - Updated to use data-src for compatibility with the new lazy script
+    doc.querySelectorAll('iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]').forEach(iframe => {
         const src = iframe.getAttribute('src');
         if (!src) return;
         const videoIdMatch = src.match(/embed\/([^?&/]+)/);
         if (!videoIdMatch?.[1]) return;
         const videoId = videoIdMatch[1];
         
-        try {
-            const fullUrl = src.startsWith('//') ? `https:${src}` : src;
-            const autoplayUrl = new URL(fullUrl);
-            autoplayUrl.searchParams.set('autoplay', '1');
-            autoplayUrl.searchParams.set('rel', '0');
-            iframe.setAttribute('src', autoplayUrl.toString());
-        } catch(e) {
-            console.warn('Could not modify YouTube src for autoplay', e);
-        }
-
         const placeholder = doc.createElement('div');
         placeholder.className = 'lazy-youtube-embed';
-        
-        const youtubeHtml = btoa(unescape(encodeURIComponent(iframe.outerHTML)));
-        placeholder.setAttribute('data-youtube-html', youtubeHtml);
+        placeholder.setAttribute('data-src', src); // Set data-src for the new script
         
         const width = iframe.getAttribute('width') || '560';
         const height = iframe.getAttribute('height') || '315';
@@ -193,7 +180,7 @@ const processEmbeds = (doc: Document) => {
     });
 };
 
-const lazyLoadScript = '<script id="pageforge-lazy-loader">(function(){"use strict";if(window.pageforgeLazyLoaderInitialized){return}window.pageforgeLazyLoaderInitialized=true;function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function t(t){const p=t.parentNode;if(!p)return;let c,d,n,o,r;if(t.matches(".lazy-youtube-embed"))c="youtube",d="data-youtube-html",o=null,r=null;else if(t.matches(".lazy-tweet-facade"))c="tweet",d="data-tweet-html",n="twitter-wjs",o="https://platform.twitter.com/widgets.js",r=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(p);else if(t.matches(".lazy-instagram-embed"))c="instagram",d="data-insta-html",n="instagram-embed-script",o="https://www.instagram.com/embed.js",r=()=>window.instgrm&&window.instgrm.Embeds.process();else{if(!t.matches(".lazy-tiktok-facade"))return;c="tiktok",d="data-tiktok-html",n="tiktok-embed-script",o="https://www.tiktok.com/embed.js"}if(!c)return;const a=t.getAttribute(d);if(!a)return;try{const i=decodeURIComponent(escape(window.atob(a))),s=document.createElement("div");s.innerHTML=i;const l=s.firstChild;l&&(p.replaceChild(l,t),o&&e(n,o,r))}catch(e){console.error("Error restoring embed for "+c,e)}}document.addEventListener("click",function(e){const c=e.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade");c&&t(c)},!1)})();</script>';
+const lazyLoadScript = '<script id="pageforge-lazy-loader">(function(){"use strict";if(window.pageforgeLazyLoaderInitialized)return;window.pageforgeLazyLoaderInitialized=!0;function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function t(t){if(t.matches(".lazy-youtube-embed")){const c=t.getAttribute("data-src");if(!c)return;const d=document.createElement("iframe"),n=new URL(c.startsWith("//")?`https:${c}`:c);return n.searchParams.set("autoplay","1"),n.searchParams.set("rel","0"),d.setAttribute("src",n.toString()),d.setAttribute("frameborder","0"),d.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"),d.setAttribute("allowfullscreen",""),d.style.cssText="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px;",t.innerHTML="",void t.appendChild(d)}const c=t.parentNode;if(!c)return;let d,n,o,r,a;if(t.matches(".lazy-tweet-facade"))d="tweet",n="data-tweet-html",o="twitter-wjs",r="https://platform.twitter.com/widgets.js",a=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(c);else if(t.matches(".lazy-instagram-embed"))d="instagram",n="data-insta-html",o="instagram-embed-script",r="https://www.instagram.com/embed.js",a=()=>window.instgrm&&window.instgrm.Embeds.process();else{if(!t.matches(".lazy-tiktok-facade"))return;d="tiktok",n="data-tiktok-html",o="tiktok-embed-script",r="https://www.tiktok.com/embed.js",a=null}if(!d)return;const i=t.getAttribute(n);if(!i)return;try{const s=decodeURIComponent(escape(window.atob(i))),l=document.createElement("div");l.innerHTML=s;const m=l.firstChild;m&&(c.replaceChild(m,t),r&&e(o,r,a))}catch(t){console.error("Error restoring embed for "+d,t)}}document.addEventListener("click",function(c){const e=c.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade");e&&t(e)},!1)})();</script>';
 
 export const useCleaner = () => {
   const [isCleaning, setIsCleaning] = useState(false);
