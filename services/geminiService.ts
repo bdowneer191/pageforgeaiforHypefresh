@@ -1,5 +1,3 @@
-
-
 import { GoogleGenAI, Type } from "@google/genai";
 
 export const generateOptimizationPlan = async (apiKey: string, pageSpeedReport: any) => {
@@ -101,11 +99,17 @@ export const rewriteToSemanticHtml = async (apiKey: string, html: string) => {
     return html;
   }
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = `You are an expert HTML developer tasked with cleaning up a blog post's HTML. Your goal is to apply semantic improvements without altering the content's structure or meaning.
-1.  Rewrite basic styling tags to their semantic HTML5 equivalents: \`<b>\` to \`<strong>\`, \`<i>\` to \`<em>\`.
-2.  **Crucially, you must preserve the original structure.** Do not move paragraphs inside blockquotes, or nest blockquotes incorrectly. A paragraph that is a sibling to a blockquote in the input must remain a sibling in the output.
-3.  **Preserve all special embed and script tags as they are.** This includes: \`<iframe>\`, \`<script>\`, and any \`<blockquote>\` element, especially those with classes like \`wp-block-quote\`, \`twitter-tweet\`, \`instagram-media\`, or \`tiktok-embed\`. Do not modify them or their contents.
-4.  Only return the raw, cleaned HTML code. Do not add any commentary, explanations, or surrounding text like \`\`\`html.
+  const prompt = `You are an expert HTML developer. Your task is to clean up a blog post's HTML.
+Your ONLY job is to replace \`<b>\` with \`<strong>\` and \`<i>\` with \`<em>\`.
+**YOU MUST NOT MAKE ANY OTHER CHANGES.**
+- **DO NOT** alter the nesting or order of tags.
+- **DO NOT** touch \`<blockquote>\`, \`<iframe>\`, or \`<script>\` tags.
+- **DO NOT** combine or split paragraphs.
+- **DO NOT** add or remove any text.
+- **DO NOT** change any attributes like \`class\` or \`href\`.
+- **DO NOT** return anything other than the raw HTML. No explanations, no markdown.
+
+This is a very simple, direct task. Do not try to be clever. Just do the replacements and nothing else.
 
 Here is the HTML to clean:
 ${html}`;
@@ -115,7 +119,15 @@ ${html}`;
         model: 'gemini-2.5-flash',
         contents: prompt,
     });
-    return response.text.trim();
+    let cleanedText = response.text.trim();
+    // In case the model still wraps the output in markdown
+    if (cleanedText.startsWith('```html')) {
+        cleanedText = cleanedText.substring(7);
+    }
+    if (cleanedText.endsWith('```')) {
+        cleanedText = cleanedText.slice(0, -3);
+    }
+    return cleanedText.trim();
   } catch (error) {
     console.error("Error rewriting to semantic HTML:", error);
     return html; // Return original HTML on error
