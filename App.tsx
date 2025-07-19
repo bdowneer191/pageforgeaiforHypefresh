@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import netlifyIdentity from 'netlify-identity-widget';
 import Icon from './components/Icon.tsx';
@@ -358,16 +359,12 @@ const App = () => {
 
   const handleClean = useCallback(async () => {
     if (!originalHtml || isCleaning) return;
-    if (options.semanticRewrite && !geminiApiKey) {
-        setApiError('A Gemini API key is required for Semantic Rewrite.');
-        return;
-    }
     
     setApiError('');
     setCleanedHtml('');
     setImpact(null);
 
-    const { cleanedHtml: resultHtml, summary, effectiveOptions } = await cleanHtml(geminiApiKey, originalHtml, options, optimizationPlan);
+    const { cleanedHtml: resultHtml, summary, effectiveOptions } = await cleanHtml(originalHtml, options, optimizationPlan);
     
     setCleanedHtml(resultHtml);
     setImpact(summary);
@@ -386,7 +383,7 @@ const App = () => {
         setAiAppliedNotification('AI recommendations have been automatically applied!');
         setTimeout(() => setAiAppliedNotification(''), 4000);
     }
-  }, [originalHtml, options, cleanHtml, isCleaning, optimizationPlan, geminiApiKey]);
+  }, [originalHtml, options, cleanHtml, isCleaning, optimizationPlan]);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(cleanedHtml);
@@ -593,8 +590,7 @@ const App = () => {
                                 label="HTML5 Semantic Rewrite" 
                                 checked={options.semanticRewrite} 
                                 onChange={handleOptionChange} 
-                                disabled={!geminiApiKey}
-                                description="Uses AI to rewrite old HTML to modern tags. Requires Gemini API Key."
+                                description="Rewrites old <b>/<i> tags to modern <strong>/<em>. Does not require an API key."
                             />
                         </div>
                     </div>
