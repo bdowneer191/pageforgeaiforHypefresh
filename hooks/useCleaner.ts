@@ -1,5 +1,3 @@
-
-
 import { useState, useCallback } from 'react';
 import { rewriteToSemanticHtml } from '../services/geminiService.ts';
 import { CleaningOptions, ImpactSummary, Recommendation } from '../types.ts';
@@ -19,7 +17,6 @@ const minifyJs = (js: string): string => {
   // This is a very basic minifier; a real-world app might use a more robust library.
   return js.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').replace(/\s+/g, ' ').trim();
 };
-
 
 const processNode = (node: Element, options: CleaningOptions) => {
     // 1. Strip comments
@@ -178,7 +175,7 @@ const processEmbeds = (doc: Document, options: CleaningOptions) => {
         placeholder.setAttribute('data-cite-url', citeUrl);
         placeholder.setAttribute('data-video-id', videoId);
         
-        const tkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" fill="currentColor" style="width: 28px; height: 28px; margin: 0 auto 8px; color: #6b7280;"><path d="M448 209.9a210.1 210.1 0 01-122.8-39.3V349.4A162.6 162.6 0 11185 188.3V277.2a74.6 74.6 0 1052.2 71.2V209.9a210.1 210.1 0 01122.8-39.3z" fill="#25f4ee"/><path d="M448 209.9a210.1 210.1 0 01-122.8-39.3V349.4A162.6 162.6 0 11185 188.3V277.2a74.6 74.6 0 1052.2 71.2V209.9a210.1 210.1 0 01122.8-39.3zM325.2 170.6V0h-81v277.2a74.6 74.6 0 1052.2 71.2V209.9a210.1 210.1 0 01-122.8-39.3V0h-81v188.3A162.6 162.6 0 110 349.4 162.6 162.6 0 01185 188.3V0h81v170.6a210.1 210.1 0 0181.4 39.3z" fill="#ff0050"/></svg>`;
+        const tkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" fill="currentColor" style="width: 28px; height: 28px; margin: 0 auto 8px; color: #ff0050;"><path d="M448 209.9a210.1 210.1 0 01-122.8-39.3V349.4A162.6 162.6 0 11185 188.3V277.2a74.6 74.6 0 1052.2 71.2V209.9a210.1 210.1 0 01122.8-39.3z"/></svg>`;
         placeholder.innerHTML = `<div style="pointer-events: none;">${tkIconSvg}<p style="font-size: 14px; margin: 0; font-weight: 500; color: #d1d5db;">View on TikTok</p><p style="font-size: 12px; color: #6b7280; margin: 4px 0 0;">Click to load this video</p></div>`;
         tkQuote.parentNode?.replaceChild(placeholder, tkQuote);
     });
@@ -205,94 +202,137 @@ const processEmbeds = (doc: Document, options: CleaningOptions) => {
                 script.src = src;
                 script.id = id;
                 script.async = true;
-                script.onload = callback;
+                if (callback) script.onload = callback;
                 document.head.appendChild(script);
+            }
+
+            function loadYouTube(target) {
+                if (target.dataset.loaded) return;
+                target.dataset.loaded = 'true';
+                const videoId = target.dataset.videoid;
+                const iframe = document.createElement('iframe');
+                iframe.setAttribute('src', 'https://www.youtube.com/embed/' + videoId + '?autoplay=1&rel=0');
+                iframe.setAttribute('frameborder', '0');
+                iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+                iframe.setAttribute('allowfullscreen', '');
+                iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
+                target.innerHTML = '';
+                target.appendChild(iframe);
+            }
+
+            function loadTwitter(target) {
+                if (target.dataset.loading) return;
+                target.dataset.loading = 'true';
+                const tweetUrl = target.dataset.tweetUrl;
+                if (!tweetUrl) return;
+                
+                target.style.cursor = 'default';
+                target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center; margin: 20px; font-family: sans-serif;">Loading Tweet...</p>';
+                
+                const renderTweet = () => {
+                    if (window.twttr && window.twttr.widgets) {
+                        target.innerHTML = '';
+                        target.style.cssText = 'border: none; padding: 0; background: transparent;';
+                        
+                        window.twttr.widgets.createTweet(
+                            tweetUrl.split('/').pop(),
+                            target,
+                            {
+                                theme: 'light',
+                                dnt: true,
+                                width: 550
+                            }
+                        ).catch(() => {
+                            target.innerHTML = '<p style="color: #666; text-align: center; font-family: sans-serif;">Failed to load tweet</p>';
+                        });
+                    }
+                };
+                
+                if (window.twttr && window.twttr.widgets) {
+                    renderTweet();
+                } else {
+                    loadScript('https://platform.twitter.com/widgets.js', 'twitter-wjs', renderTweet);
+                }
+            }
+
+            function loadInstagram(target) {
+                if (target.dataset.loading) return;
+                target.dataset.loading = 'true';
+                const postUrl = target.dataset.postUrl;
+                if (!postUrl) return;
+                
+                target.style.cursor = 'default';
+                target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center; margin: 20px; font-family: sans-serif;">Loading Instagram Post...</p>';
+
+                const renderInstagram = () => {
+                    if (window.instgrm) {
+                        const blockquote = document.createElement('blockquote');
+                        blockquote.className = 'instagram-media';
+                        blockquote.setAttribute('data-instgrm-permalink', postUrl);
+                        blockquote.setAttribute('data-instgrm-version', '14');
+                        blockquote.style.cssText = 'background: white; border: 0; border-radius: 3px; box-shadow: 0 0 1px 0 rgba(0,0,0,0.5); margin: 1px; max-width: 540px; min-width: 326px; padding: 0; width: calc(100% - 2px);';
+                        
+                        target.innerHTML = '';
+                        target.style.cssText = 'border: none; padding: 0; background: transparent;';
+                        target.appendChild(blockquote);
+                        
+                        window.instgrm.Embeds.process();
+                    }
+                };
+                
+                if (window.instgrm) {
+                    renderInstagram();
+                } else {
+                    loadScript('https://www.instagram.com/embed.js', 'instagram-wjs', renderInstagram);
+                }
+            }
+
+            function loadTikTok(target) {
+                if (target.dataset.loading) return;
+                target.dataset.loading = 'true';
+                const citeUrl = target.dataset.citeUrl;
+                const videoId = target.dataset.videoId;
+                if (!citeUrl) return;
+
+                target.style.cursor = 'default';
+                target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center; margin: 20px; font-family: sans-serif;">Loading TikTok...</p>';
+                
+                const blockquote = document.createElement('blockquote');
+                blockquote.className = 'tiktok-embed';
+                blockquote.setAttribute('cite', citeUrl);
+                if (videoId) blockquote.setAttribute('data-video-id', videoId);
+                blockquote.style.cssText = 'max-width: 605px; min-width: 325px; margin: 0 auto;';
+                
+                const section = document.createElement('section');
+                const link = document.createElement('a');
+                link.setAttribute('target', '_blank');
+                link.setAttribute('href', citeUrl);
+                link.textContent = 'View on TikTok';
+                section.appendChild(link);
+                blockquote.appendChild(section);
+                
+                target.innerHTML = '';
+                target.style.cssText = 'border: none; padding: 0; background: transparent;';
+                target.appendChild(blockquote);
+                
+                loadScript('https://www.tiktok.com/embed.js', 'tiktok-wjs');
             }
 
             document.addEventListener('click', function(event) {
                 const target = event.target.closest('.lazy-youtube-facade, .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade');
                 if (!target) return;
 
-                if (target.matches('.lazy-youtube-facade') && !target.dataset.loaded) {
-                    target.dataset.loaded = 'true';
-                    const videoId = target.dataset.videoid;
-                    const iframe = document.createElement('iframe');
-                    iframe.setAttribute('src', 'https://www.youtube.com/embed/' + videoId + '?autoplay=1&rel=0');
-                    iframe.setAttribute('frameborder', '0');
-                    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
-                    iframe.setAttribute('allowfullscreen', '');
-                    iframe.style.width = '100%';
-                    iframe.style.height = '100%';
-                    target.innerHTML = '';
-                    target.style.aspectRatio = 'auto';
-                    target.appendChild(iframe);
-                }
-                
-                else if (target.matches('.lazy-twitter-facade') && !target.dataset.loading) {
-                    target.dataset.loading = 'true';
-                    const tweetUrl = target.dataset.tweetUrl;
-                    if (!tweetUrl) return;
-                    target.style.cursor = 'default';
-                    target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center;">Loading Tweet...</p>';
-                    
-                    const renderTweet = () => {
-                        if (window.twttr && window.twttr.widgets) {
-                            const tweetContainer = document.createElement('div');
-                            tweetContainer.innerHTML = '<blockquote class="twitter-tweet" data-dnt="true"><a href="' + tweetUrl + '"></a></blockquote>';
-                            target.innerHTML = '';
-                            target.style.cssText = 'border: none; padding: 0; background-color: transparent;';
-                            target.appendChild(tweetContainer);
-                            window.twttr.widgets.load(target);
-                        }
-                    };
-                    loadScript('https://platform.twitter.com/widgets.js', 'twitter-wjs', renderTweet);
-                }
+                event.preventDefault();
+                event.stopPropagation();
 
-                else if (target.matches('.lazy-instagram-facade') && !target.dataset.loading) {
-                    target.dataset.loading = 'true';
-                    const postUrl = target.dataset.postUrl;
-                    if (!postUrl) return;
-                    target.style.cursor = 'default';
-                    target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center;">Loading Instagram Post...</p>';
-
-                    const renderInstagram = () => {
-                        if (window.instgrm) {
-                            const embedContainer = document.createElement('div');
-                            const blockquote = document.createElement('blockquote');
-                            blockquote.className = 'instagram-media';
-                            blockquote.setAttribute('data-instgrm-permalink', postUrl);
-                            blockquote.setAttribute('data-instgrm-version', '14');
-                            embedContainer.appendChild(blockquote);
-                            target.innerHTML = '';
-                            target.style.cssText = 'border: none; padding: 0; background-color: transparent;';
-                            target.appendChild(embedContainer);
-                            window.instgrm.Embeds.process();
-                        }
-                    };
-                    loadScript('https://www.instagram.com/embed.js', 'instagram-wjs', renderInstagram);
-                }
-
-                else if (target.matches('.lazy-tiktok-facade') && !target.dataset.loading) {
-                    target.dataset.loading = 'true';
-                    const citeUrl = target.dataset.citeUrl;
-                    const videoId = target.dataset.videoId;
-                    if (!citeUrl || !videoId) return;
-
-                    target.style.cursor = 'default';
-                    target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center;">Loading TikTok...</p>';
-                    
-                    const blockquote = document.createElement('blockquote');
-                    blockquote.className = 'tiktok-embed';
-                    blockquote.setAttribute('cite', citeUrl);
-                    blockquote.setAttribute('data-video-id', videoId);
-                    blockquote.style.cssText = 'max-width: 605px; min-width: 325px; margin: 1rem auto;';
-                    blockquote.innerHTML = '<section><a target="_blank" href="' + citeUrl + '">Watch video on TikTok</a></section>';
-                    
-                    target.innerHTML = '';
-                    target.style.cssText = 'border: none; padding: 0; background-color: transparent;';
-                    target.appendChild(blockquote);
-                    
-                    loadScript('https://www.tiktok.com/embed.js', 'tiktok-wjs');
+                if (target.classList.contains('lazy-youtube-facade')) {
+                    loadYouTube(target);
+                } else if (target.classList.contains('lazy-twitter-facade')) {
+                    loadTwitter(target);
+                } else if (target.classList.contains('lazy-instagram-facade')) {
+                    loadInstagram(target);
+                } else if (target.classList.contains('lazy-tiktok-facade')) {
+                    loadTikTok(target);
                 }
             });
         `;
@@ -301,12 +341,59 @@ const processEmbeds = (doc: Document, options: CleaningOptions) => {
         const facadeStyles = doc.createElement('style');
         facadeStyles.id = 'pageforge-facade-style';
         facadeStyles.textContent = `
-            .lazy-youtube-facade { position: relative; cursor: pointer; background-color: #000; margin: 1rem auto; border-radius: 8px; overflow: hidden; }
-            .lazy-youtube-facade .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 68px; height: 48px; background: rgba(0,0,0,0.6); border-radius: 10px; pointer-events: none; }
-            .lazy-youtube-facade .play-button::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-40%, -50%); border-style: solid; border-width: 12px 0 12px 20px; border-color: transparent transparent transparent white; }
-            .lazy-youtube-facade:hover .play-button { background: rgba(255,0,0,0.8); }
-            .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade { border: 1px solid #374151; border-radius: 12px; padding: 16px; background-color: #1f2937; color: #9ca3af; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; cursor: pointer; font-family: sans-serif; margin: 1rem auto; transition: background-color 0.2s; max-width: 540px; }
-            .lazy-twitter-facade:hover, .lazy-instagram-facade:hover, .lazy-tiktok-facade:hover { background-color: #374151; }
+            .lazy-youtube-facade { 
+                position: relative; 
+                cursor: pointer; 
+                background-color: #000; 
+                margin: 1rem auto; 
+                border-radius: 8px; 
+                overflow: hidden; 
+                display: block;
+            }
+            .lazy-youtube-facade .play-button { 
+                position: absolute; 
+                top: 50%; 
+                left: 50%; 
+                transform: translate(-50%, -50%); 
+                width: 68px; 
+                height: 48px; 
+                background: rgba(0,0,0,0.6); 
+                border-radius: 10px; 
+                pointer-events: none; 
+            }
+            .lazy-youtube-facade .play-button::after { 
+                content: ''; 
+                position: absolute; 
+                top: 50%; 
+                left: 50%; 
+                transform: translate(-40%, -50%); 
+                border-style: solid; 
+                border-width: 12px 0 12px 20px; 
+                border-color: transparent transparent transparent white; 
+            }
+            .lazy-youtube-facade:hover .play-button { 
+                background: rgba(255,0,0,0.8); 
+            }
+            .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade { 
+                border: 1px solid #374151; 
+                border-radius: 12px; 
+                padding: 16px; 
+                background-color: #1f2937; 
+                color: #9ca3af; 
+                min-height: 120px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                text-align: center; 
+                cursor: pointer; 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+                margin: 1rem auto; 
+                transition: background-color 0.2s; 
+                max-width: 540px; 
+            }
+            .lazy-twitter-facade:hover, .lazy-instagram-facade:hover, .lazy-tiktok-facade:hover { 
+                background-color: #374151; 
+            }
         `;
         doc.head.appendChild(facadeStyles);
     }
@@ -404,7 +491,6 @@ const optimizeLoading = (doc: Document, options: CleaningOptions) => {
         });
     }
 };
-
 
 export const useCleaner = () => {
     const [isCleaning, setIsCleaning] = useState(false);
