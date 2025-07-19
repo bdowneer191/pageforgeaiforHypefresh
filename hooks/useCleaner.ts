@@ -214,6 +214,22 @@ export const useCleaner = () => {
     
     const parser = new DOMParser();
     const doc = parser.parseFromString(processedHtml, 'text/html');
+
+    // **CRITICAL FIX**: Pre-emptively remove any old, conflicting lazy-load scripts.
+    doc.querySelectorAll('script').forEach(script => {
+      if (!script.src && (script.textContent?.includes('lazy-tweet-facade') || script.textContent?.includes('lazy-youtube-embed'))) {
+        if (script.id !== 'pageforge-lazy-loader') {
+            const parent = script.parentNode;
+            // Also remove the invalid wrapping <p> tag if it exists and is otherwise empty.
+            if (parent?.nodeName === 'P' && parent.textContent?.trim() === script.textContent?.trim()) {
+                parent.parentNode?.removeChild(parent);
+            } else {
+                parent?.removeChild(script);
+            }
+        }
+      }
+    });
+    
     const originalNodeCount = doc.getElementsByTagName('*').length;
     let hasLazyEmbeds = false;
     
@@ -240,7 +256,8 @@ export const useCleaner = () => {
     if (effectiveOptions.deferScripts) {
         doc.querySelectorAll('script[src]').forEach(script => {
             const src = script.getAttribute('src');
-            if (src && src.toLowerCase().includes('jquery')) return;
+            // Do not defer jQuery or the lazy loader itself if it's somehow external
+            if (src && (src.toLowerCase().includes('jquery') || src.includes('pageforge-lazy-loader'))) return;
             if (!script.hasAttribute('defer') && !script.hasAttribute('async')) {
                  script.setAttribute('defer', '');
             }
@@ -331,7 +348,7 @@ export const useCleaner = () => {
         return `<style>${minifiedCss}</style>`;
       });
       finalHtml = finalHtml.replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, (match, js) => {
-        if (match.includes('src=')) return match;
+        if (match.includes('src=') || match.includes('pageforge-lazy-loader')) return match; // Keep src scripts and our lazy loader
         const minifiedJs = js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '').replace(/\s+/g, ' ').trim();
         return `<script>${minifiedJs}</script>`;
       });
@@ -341,7 +358,7 @@ export const useCleaner = () => {
         finalHtml = finalHtml.replace(/>\s+</g, '><').trim();
     }
     
-    if (hasLazyEmbeds && !finalHtml.includes('id="pageforge-lazy-loader"')) {
+    if (hasLazyEmbeds && !doc.querySelector('#pageforge-lazy-loader')) {
         finalHtml += lazyLoadScript;
     }
 
