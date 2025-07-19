@@ -49,10 +49,18 @@ const processEmbeds = (doc: Document) => {
         
         figure.parentNode?.replaceChild(iframe, figure);
     });
+    
+    doc.querySelectorAll('figure.wp-block-embed-reddit').forEach(figure => {
+        const wrapper = figure.querySelector('.wp-block-embed__wrapper');
+        const blockquote = wrapper?.querySelector('blockquote.reddit-card');
+        if (blockquote) {
+            figure.parentNode?.replaceChild(blockquote.cloneNode(true), figure);
+        }
+    });
 
     // --- LAZY-LOADING PASS ---
 
-    // YouTube - Updated to use data-src for compatibility with the new lazy script
+    // YouTube
     doc.querySelectorAll('iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]').forEach(iframe => {
         const src = iframe.getAttribute('src');
         if (!src) return;
@@ -62,7 +70,7 @@ const processEmbeds = (doc: Document) => {
         
         const placeholder = doc.createElement('div');
         placeholder.className = 'lazy-youtube-embed';
-        placeholder.setAttribute('data-src', src); // Set data-src for the new script
+        placeholder.setAttribute('data-src', src);
         
         const width = iframe.getAttribute('width') || '560';
         const height = iframe.getAttribute('height') || '315';
@@ -179,12 +187,17 @@ const processEmbeds = (doc: Document) => {
     });
     
     // Reddit
-    doc.querySelectorAll('iframe[src*="reddit.com/media"], iframe[src*="embed.reddit.com"]').forEach(frame => {
+    doc.querySelectorAll('blockquote.reddit-card').forEach(card => {
+        const nextSibling = card.nextElementSibling;
+        if (nextSibling instanceof HTMLScriptElement && nextSibling.src.includes('embed.reddit.com')) {
+            nextSibling.remove();
+        }
+        
         const placeholder = doc.createElement('div');
         placeholder.className = 'lazy-reddit-embed';
         
         Object.assign(placeholder.style, {
-            border: '1px solid #ff4500', // Reddit orange-red
+            border: '1px solid #374151',
             borderRadius: '8px',
             padding: '16px',
             cursor: 'pointer',
@@ -197,18 +210,18 @@ const processEmbeds = (doc: Document) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: '200px'
+            minHeight: '112px'
         });
         
-        placeholder.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 48px; height: 48px; color: #ff4500; margin-bottom: 12px;"><path d="M12.0001 21.6001C17.3026 21.6001 21.6001 17.3026 21.6001 12.0001C21.6001 6.69757 17.3026 2.40002 12.0001 2.40002C6.69757 2.40002 2.40002 6.69757 2.40002 12.0001C2.40002 17.3026 6.69757 21.6001 12.0001 21.6001ZM12.0001 19.2001C8.02952 19.2001 4.80002 15.9706 4.80002 12.0001C4.80002 8.02952 8.02952 4.80002 12.0001 4.80002C15.9706 4.80002 19.2001 8.02952 19.2001 12.0001C19.2001 15.9706 15.9706 19.2001 12.0001 19.2001ZM12.0001 11.5201C11.1669 11.5201 10.4688 11.1235 10.012 10.4668C9.93922 10.356 9.80942 10.3013 9.67562 10.3341L7.75122 10.8241C7.62772 10.8543 7.53032 10.9631 7.51992 11.0906C7.50952 11.218 7.59002 11.3342 7.71212 11.3592L9.63652 11.8492C10.0384 12.8258 10.9416 13.5201 12.0001 13.5201C13.0585 13.5201 13.9617 12.8258 14.3636 11.8492L16.288 11.3592C16.4101 11.3342 16.4906 11.218 16.4802 11.0906C16.4698 10.9631 16.3724 10.8543 16.2489 10.8241L14.3245 10.3341C14.1907 10.3013 14.0609 10.356 13.9881 10.4668C13.5313 11.1235 12.8332 11.5201 12.0001 11.5201ZM8.40002 8.76002C8.99522 8.76002 9.48002 8.27522 9.48002 7.68002C9.48002 7.08482 8.99522 6.60002 8.40002 6.60002C7.80482 6.60002 7.32002 7.08482 7.32002 7.68002C7.32002 8.27522 7.80482 8.76002 8.40002 8.76002ZM15.6001 8.76002C16.1953 8.76002 16.6801 8.27522 16.6801 7.68002C16.6801 7.08482 16.1953 6.60002 15.6001 6.60002C15.0049 6.60002 14.5201 7.08482 14.5201 7.68002C14.5201 8.27522 15.0049 8.76002 15.6001 8.76002ZM14.4553 15.1118C14.2237 14.7891 13.8823 14.5715 13.5013 14.4981C12.8713 14.3781 11.1298 14.3781 10.4998 14.4981C10.1188 14.5715 9.77742 14.7891 9.54492 15.1118C9.32472 15.4184 9.25542 15.7981 9.35622 16.1558C9.45702 16.5134 9.71802 16.8122 10.0717 16.9634C10.8718 17.3018 13.1283 17.3018 13.9284 16.9634C14.2821 16.8122 14.5431 16.5134 14.6439 16.1558C14.7447 15.7981 14.6754 15.4184 14.4553 15.1118Z" /></svg><strong style="font-weight: bold; color: #fff;">Load Reddit Embed</strong></div>`;
+        placeholder.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 48px; height: 48px; color: #ff4500; margin-bottom: 12px;"><path d="M12.0001 21.6001C17.3026 21.6001 21.6001 17.3026 21.6001 12.0001C21.6001 6.69757 17.3026 2.40002 12.0001 2.40002C6.69757 2.40002 2.40002 6.69757 2.40002 12.0001C2.40002 17.3026 6.69757 21.6001 12.0001 21.6001ZM12.0001 19.2001C8.02952 19.2001 4.80002 15.9706 4.80002 12.0001C4.80002 8.02952 8.02952 4.80002 12.0001 4.80002C15.9706 4.80002 19.2001 8.02952 19.2001 12.0001C19.2001 15.9706 15.9706 19.2001 12.0001 19.2001ZM12.0001 11.5201C11.1669 11.5201 10.4688 11.1235 10.012 10.4668C9.93922 10.356 9.80942 10.3013 9.67562 10.3341L7.75122 10.8241C7.62772 10.8543 7.53032 10.9631 7.51992 11.0906C7.50952 11.218 7.59002 11.3342 7.71212 11.3592L9.63652 11.8492C10.0384 12.8258 10.9416 13.5201 12.0001 13.5201C13.0585 13.5201 13.9617 12.8258 14.3636 11.8492L16.288 11.3592C16.4101 11.3342 16.4906 11.218 16.4802 11.0906C16.4698 10.9631 16.3724 10.8543 16.2489 10.8241L14.3245 10.3341C14.1907 10.3013 14.0609 10.356 13.9881 10.4668C13.5313 11.1235 12.8332 11.5201 12.0001 11.5201ZM8.40002 8.76002C8.99522 8.76002 9.48002 8.27522 9.48002 7.68002C9.48002 7.08482 8.99522 6.60002 8.40002 6.60002C7.80482 6.60002 7.32002 7.08482 7.32002 7.68002C7.32002 8.27522 7.80482 8.76002 8.40002 8.76002ZM15.6001 8.76002C16.1953 8.76002 16.6801 8.27522 16.6801 7.68002C16.6801 7.08482 16.1953 6.60002 15.6001 6.60002C15.0049 6.60002 14.5201 7.08482 14.5201 7.68002C14.5201 8.27522 15.0049 8.76002 15.6001 8.76002ZM14.4553 15.1118C14.2237 14.7891 13.8823 14.5715 13.5013 14.4981C12.8713 14.3781 11.1298 14.3781 10.4998 14.4981C10.1188 14.5715 9.77742 14.7891 9.54492 15.1118C9.32472 15.4184 9.25542 15.7981 9.35622 16.1558C9.45702 16.5134 9.71802 16.8122 10.0717 16.9634C10.8718 17.3018 13.1283 17.3018 13.9284 16.9634C14.2821 16.8122 14.5431 16.5134 14.6439 16.1558C14.7447 15.7981 14.6754 15.4184 14.4553 15.1118Z" /></svg><strong style="font-weight: bold; color: #fff;">Load Reddit Post</strong></div>`;
     
-        const frameHtml = btoa(unescape(encodeURIComponent(frame.outerHTML)));
-        placeholder.setAttribute('data-reddit-html', frameHtml);
-        frame.parentNode?.replaceChild(placeholder, frame);
+        const cardHtml = btoa(unescape(encodeURIComponent(card.outerHTML)));
+        placeholder.setAttribute('data-reddit-html', cardHtml);
+        card.parentNode?.replaceChild(placeholder, card);
     });
 };
 
-const lazyLoadScript = '<script id="pageforge-lazy-loader">(function(){"use strict";if(window.pageforgeLazyLoaderInitialized)return;window.pageforgeLazyLoaderInitialized=!0;function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function t(t){if(t.matches(".lazy-youtube-embed")){const c=t.getAttribute("data-src");if(!c)return;const d=document.createElement("iframe"),n=new URL(c.startsWith("//")?`https:${c}`:c);return n.searchParams.set("autoplay","1"),n.searchParams.set("rel","0"),d.setAttribute("src",n.toString()),d.setAttribute("frameborder","0"),d.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"),d.setAttribute("allowfullscreen",""),d.style.cssText="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px;",t.innerHTML="",void t.appendChild(d)}const c=t.parentNode;if(!c)return;let d,n,o,r,a;if(t.matches(".lazy-tweet-facade"))d="tweet",n="data-tweet-html",o="twitter-wjs",r="https://platform.twitter.com/widgets.js",a=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(c);else if(t.matches(".lazy-instagram-embed"))d="instagram",n="data-insta-html",o="instagram-embed-script",r="https://www.instagram.com/embed.js",a=()=>window.instgrm&&window.instgrm.Embeds.process();else if(t.matches(".lazy-tiktok-facade"))d="tiktok",n="data-tiktok-html",o="tiktok-embed-script",r="https://www.tiktok.com/embed.js",a=null;else if(t.matches(".lazy-reddit-embed"))d="reddit",n="data-reddit-html",o=null,r=null,a=null;else return;if(!d)return;const i=t.getAttribute(n);if(!i)return;try{const s=decodeURIComponent(escape(window.atob(i))),l=document.createElement("div");l.innerHTML=s;const m=l.firstChild;m&&(c.replaceChild(m,t),r&&e(o,r,a))}catch(t){console.error("Error restoring embed for "+d,t)}}document.addEventListener("click",function(c){const e=c.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade, .lazy-reddit-embed");e&&t(e)},!1)})();</script>';
+const lazyLoadScript = `<script id="pageforge-lazy-loader">(function(){"use strict";if(window.pageforgeLazyLoaderInitialized)return;window.pageforgeLazyLoaderInitialized=!0;function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function t(t){if(t.matches(".lazy-youtube-embed")){const c=t.getAttribute("data-src");if(!c)return;const d=document.createElement("iframe"),n=new URL(c.startsWith("//")?("https:"+c):c);n.searchParams.set("autoplay","1"),n.searchParams.set("rel","0"),d.setAttribute("src",n.toString()),d.setAttribute("frameborder","0"),d.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"),d.setAttribute("allowfullscreen",""),d.style.cssText="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px;",t.innerHTML="",t.appendChild(d);return}const c=t.parentNode;if(!c)return;let d,n,o,r,a;if(t.matches(".lazy-tweet-facade"))d="tweet",n="data-tweet-html",o="twitter-wjs",r="https://platform.twitter.com/widgets.js",a=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(c);else if(t.matches(".lazy-instagram-embed"))d="instagram",n="data-insta-html",o="instagram-embed-script",r="https://www.instagram.com/embed.js",a=()=>window.instgrm&&window.instgrm.Embeds.process();else if(t.matches(".lazy-tiktok-facade"))d="tiktok",n="data-tiktok-html",o="tiktok-embed-script",r="https://www.tiktok.com/embed.js",a=null;else if(t.matches(".lazy-reddit-embed"))d="reddit",n="data-reddit-html",o="reddit-widgets-js",r="https://embed.reddit.com/widgets.js",a=null;else return;if(!d)return;const i=t.getAttribute(n);if(!i)return;try{const s=decodeURIComponent(escape(window.atob(i))),l=document.createElement("div");l.innerHTML=s;const m=l.firstChild;m&&(c.replaceChild(m,t),r&&e(o,r,a))}catch(t){console.error("Error restoring embed for "+d,t)}}document.addEventListener("click",function(c){const e=c.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade, .lazy-reddit-embed");e&&t(e)},!1)})();</script>`;
 
 export const useCleaner = () => {
   const [isCleaning, setIsCleaning] = useState(false);
@@ -229,6 +242,7 @@ export const useCleaner = () => {
             if (title.includes('defer') && title.includes('javascript')) effectiveOptions.deferScripts = true;
             if (title.includes('optimize') && title.includes('css')) effectiveOptions.optimizeCssLoading = true;
             if (title.includes('font')) effectiveOptions.optimizeFontLoading = true;
+            if (title.includes('image format') || title.includes('webp')) effectiveOptions.optimizeImages = true;
         });
     }
 
@@ -237,17 +251,14 @@ export const useCleaner = () => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
 
-    // **ROBUSTNESS FIX**: Apply semantic rewrite directly to the doc object to prevent re-parsing issues.
     if (effectiveOptions.semanticRewrite) {
         rewriteToSemanticHtml(doc);
     }
 
-    // **CRITICAL FIX**: Pre-emptively remove any old, conflicting lazy-load scripts.
     doc.querySelectorAll('script').forEach(script => {
       if (!script.src && (script.textContent?.includes('lazy-tweet-facade') || script.textContent?.includes('lazy-youtube-embed'))) {
         if (script.id !== 'pageforge-lazy-loader') {
             const parent = script.parentNode;
-            // Also remove the invalid wrapping <p> tag if it exists and is otherwise empty.
             if (parent?.nodeName === 'P' && parent.textContent?.trim() === script.textContent?.trim()) {
                 parent.parentNode?.removeChild(parent);
             } else {
@@ -270,7 +281,7 @@ export const useCleaner = () => {
     if (effectiveOptions.lazyLoadImages) {
         const images = doc.querySelectorAll('img');
         images.forEach((img, index) => {
-            if (index < 2) { // Eager load first two images for LCP
+            if (index < 2) {
                 img.setAttribute('loading', 'eager');
                 img.setAttribute('fetchpriority', 'high');
             } else {
@@ -279,11 +290,48 @@ export const useCleaner = () => {
             }
         });
     }
+
+    if (effectiveOptions.optimizeImages) {
+        doc.querySelectorAll('img').forEach(img => {
+            let src = img.getAttribute('src');
+            if (!src || src.includes('.svg') || src.startsWith('data:')) return; // Ignore SVGs and data URIs
+    
+            try {
+                const url = new URL(src);
+                // Simple check for CDN URLs that support image processing
+                if (url.hostname.includes('i0.wp.com') || url.hostname.includes('i1.wp.com') || url.hostname.includes('i2.wp.com')) {
+                    url.searchParams.set('quality', '75');
+                    url.searchParams.set('strip', 'all');
+                    url.searchParams.set('w', '1024'); // Resize to a reasonable max width
+                    url.searchParams.set('format', 'webp'); 
+                    img.setAttribute('src', url.toString());
+                } else if (img.hasAttribute('srcset')) {
+                    // Handle responsive images by converting sources to WebP
+                    const newSrcset = img.getAttribute('srcset')
+                        ?.split(',')
+                        .map(source => {
+                            const [url, descriptor] = source.trim().split(/\s+/);
+                            if (url.includes('.svg')) return source;
+                            try {
+                                const cdnUrl = new URL(url);
+                                cdnUrl.searchParams.set('format', 'webp');
+                                return `${cdnUrl.toString()} ${descriptor}`;
+                            } catch {
+                                return source; // Return original if URL is invalid
+                            }
+                        })
+                        .join(', ');
+                    if (newSrcset) img.setAttribute('srcset', newSrcset);
+                }
+            } catch (e) {
+                console.warn('Could not process image URL:', src, e);
+            }
+        });
+    }
     
     if (effectiveOptions.deferScripts) {
         doc.querySelectorAll('script[src]').forEach(script => {
             const src = script.getAttribute('src');
-            // Do not defer jQuery or the lazy loader itself if it's somehow external
             if (src && (src.toLowerCase().includes('jquery') || src.includes('pageforge-lazy-loader'))) return;
             if (!script.hasAttribute('defer') && !script.hasAttribute('async')) {
                  script.setAttribute('defer', '');
