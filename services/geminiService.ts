@@ -93,43 +93,31 @@ export const generateComparisonAnalysis = async (apiKey: string, reportBefore: a
 };
 
 
-export const rewriteToSemanticHtml = async (apiKey: string, html: string) => {
-  if (!apiKey) {
-    console.warn("Semantic rewrite skipped: Gemini API key not provided.");
-    return html;
-  }
-  const ai = new GoogleGenAI({ apiKey });
-  const prompt = `You are an expert HTML developer. Your task is to clean up a blog post's HTML.
-Your ONLY job is to replace \`<b>\` with \`<strong>\` and \`<i>\` with \`<em>\`.
-**YOU MUST NOT MAKE ANY OTHER CHANGES.**
-- **DO NOT** alter the nesting or order of tags.
-- **DO NOT** touch \`<blockquote>\`, \`<iframe>\`, or \`<script>\` tags.
-- **DO NOT** combine or split paragraphs.
-- **DO NOT** add or remove any text.
-- **DO NOT** change any attributes like \`class\` or \`href\`.
-- **DO NOT** return anything other than the raw HTML. No explanations, no markdown.
-
-This is a very simple, direct task. Do not try to be clever. Just do the replacements and nothing else.
-
-Here is the HTML to clean:
-${html}`;
-
+export const rewriteToSemanticHtml = (doc: Document): void => {
+  if (!doc) return;
   try {
-     const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-    });
-    let cleanedText = response.text.trim();
-    // In case the model still wraps the output in markdown
-    if (cleanedText.startsWith('```html')) {
-        cleanedText = cleanedText.substring(7);
-    }
-    if (cleanedText.endsWith('```')) {
-        cleanedText = cleanedText.slice(0, -3);
-    }
-    return cleanedText.trim();
+    const replaceTag = (oldTag: string, newTag: string) => {
+      const elements = doc.querySelectorAll(oldTag);
+      elements.forEach(oldEl => {
+        const newEl = doc.createElement(newTag);
+        // Copy attributes
+        for (const attr of oldEl.attributes) {
+          newEl.setAttribute(attr.name, attr.value);
+        }
+        // Move children
+        while (oldEl.firstChild) {
+          newEl.appendChild(oldEl.firstChild);
+        }
+        oldEl.parentNode?.replaceChild(newEl, oldEl);
+      });
+    };
+
+    replaceTag('b', 'strong');
+    replaceTag('i', 'em');
+
   } catch (error) {
-    console.error("Error rewriting to semantic HTML:", error);
-    return html; // Return original HTML on error
+    console.error("Error during semantic HTML rewrite:", error);
+    // The function modifies the doc in place, so we don't return anything.
+    // Errors are logged, but processing continues.
   }
 };
