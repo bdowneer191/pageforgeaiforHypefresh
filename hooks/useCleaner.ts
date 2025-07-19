@@ -2,9 +2,9 @@
 
 import { useState, useCallback } from 'react';
 import { rewriteToSemanticHtml } from '../services/geminiService.ts';
-import { CleaningOptions } from '../types.ts';
+import { CleaningOptions, ImpactSummary, Recommendation } from '../types.ts';
 
-const processEmbeds = (doc) => {
+const processEmbeds = (doc: Document) => {
     // --- NORMALIZATION PASS ---
     // Convert modern WordPress embed blocks into standard formats that our lazy-loader can understand.
     doc.querySelectorAll('figure.wp-block-embed-twitter').forEach(figure => {
@@ -35,17 +35,21 @@ const processEmbeds = (doc) => {
         placeholder.className = 'lazy-youtube-embed';
         placeholder.setAttribute('data-src', src);
         
+        const width = iframe.getAttribute('width') || '560';
+        const height = iframe.getAttribute('height') || '315';
+
         Object.assign(placeholder.style, {
             position: 'relative',
             cursor: 'pointer',
-            width: iframe.getAttribute('width') ? `${iframe.getAttribute('width')}px` : '100%',
-            maxWidth: '100%',
-            aspectRatio: '16/9',
+            width: '100%',
+            maxWidth: `${width}px`,
+            aspectRatio: `${width} / ${height}`,
             backgroundImage: `url(https://i.ytimg.com/vi/${videoId}/hqdefault.jpg)`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             borderRadius: '8px',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            margin: '1rem auto'
         });
 
         placeholder.innerHTML = `<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.2);"><svg style="width:68px;height:48px;filter:drop-shadow(0 0 5px rgba(0,0,0,0.5));" viewBox="0 0 68 48"><path d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#f00"></path><path d="M 45,24 27,14 27,34" fill="#fff"></path></svg></div>`;
@@ -54,8 +58,8 @@ const processEmbeds = (doc) => {
 
     // Twitter
     doc.querySelectorAll('blockquote.twitter-tweet').forEach(tweet => {
-        let nextSibling = tweet.nextElementSibling;
-        if (nextSibling?.tagName === 'SCRIPT' && nextSibling.src.includes('platform.twitter.com')) {
+        const nextSibling = tweet.nextElementSibling;
+        if (nextSibling instanceof HTMLScriptElement && nextSibling.src.includes('platform.twitter.com')) {
             nextSibling.remove();
         }
 
@@ -94,8 +98,8 @@ const processEmbeds = (doc) => {
 
     // Instagram
     doc.querySelectorAll('blockquote.instagram-media').forEach(insta => {
-        let nextSibling = insta.nextElementSibling;
-        if (nextSibling?.tagName === 'SCRIPT' && nextSibling.src.includes('instagram.com/embed.js')) {
+        const nextSibling = insta.nextElementSibling;
+        if (nextSibling instanceof HTMLScriptElement && nextSibling.src.includes('instagram.com/embed.js')) {
             nextSibling.remove();
         }
         
@@ -118,8 +122,8 @@ const processEmbeds = (doc) => {
 
     // TikTok
     doc.querySelectorAll('blockquote.tiktok-embed').forEach(tiktok => {
-        let nextSibling = tiktok.nextElementSibling;
-        if (nextSibling?.tagName === 'SCRIPT' && nextSibling.src.includes('tiktok.com/embed.js')) {
+        const nextSibling = tiktok.nextElementSibling;
+        if (nextSibling instanceof HTMLScriptElement && nextSibling.src.includes('tiktok.com/embed.js')) {
             nextSibling.remove();
         }
 
@@ -146,18 +150,35 @@ const processEmbeds = (doc) => {
     });
 };
 
-const lazyLoadScript = `<script>(function(){"use strict";function e(t,c,o){const n=document.getElementById(t);if(n)return void(o&&o());const d=document.createElement("script");d.id=t,d.src=c,d.async=!0,o&&(d.onload=o),document.head.appendChild(d)}function t(t){if(t.matches(".lazy-youtube-embed")){const c=t.getAttribute("data-src");if(!c)return;const o=document.createElement("iframe");return o.setAttribute("src",c+"?autoplay=1"),o.setAttribute("frameborder","0"),o.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"),o.setAttribute("allowfullscreen",""),o.style.cssText="position:absolute;top:0;left:0;width:100%;height:100%;",t.innerHTML="",void t.appendChild(o)}let c,o,n,d,r;if(t.matches(".lazy-tweet-facade"))c="tweet",o="data-tweet-html",n="twitter-wjs",d="https://platform.twitter.com/widgets.js",r=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(t.parentNode);else if(t.matches(".lazy-instagram-embed"))c="instagram",o="data-insta-html",n="instagram-embed-script",d="https://www.instagram.com/embed.js",r=()=>window.instgrm&&window.instgrm.Embeds.process();else{if(!t.matches(".lazy-tiktok-facade"))return;c="tiktok",o="data-tiktok-html",n="tiktok-embed-script",d="https://www.tiktok.com/embed.js"}if(!c)return;const a=t.getAttribute(o);if(!a)return;try{const i=decodeURIComponent(escape(window.atob(a))),s=document.createElement("div");s.innerHTML=i;const l=s.firstChild;l&&(t.parentNode.replaceChild(l,t),d&&e(n,d,r))}catch(e){console.error("Error restoring embed for "+c,e)}}document.addEventListener("click",function(e){const c=e.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade");c&&t(c)},!1)})();</script>`;
+const lazyLoadScript = `<script>(function(){"use strict";function e(e,t,o){const c=document.getElementById(e);if(c)return void(o&&o());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,o&&(n.onload=o),document.head.appendChild(n)}function t(t){let o,c,n,d,r;if(t.matches(".lazy-youtube-embed")){const e=t.getAttribute("data-src");if(!e)return;const o=document.createElement("iframe");return o.setAttribute("src",e+"?autoplay=1&rel=0"),o.setAttribute("frameborder","0"),o.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"),o.setAttribute("allowfullscreen",""),o.style.cssText="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px",t.innerHTML="",void t.appendChild(o)}if(t.matches(".lazy-tweet-facade"))o="tweet",c="data-tweet-html",n="twitter-wjs",d="https://platform.twitter.com/widgets.js",r=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(t.parentNode);else if(t.matches(".lazy-instagram-embed"))o="instagram",c="data-insta-html",n="instagram-embed-script",d="https://www.instagram.com/embed.js",r=()=>window.instgrm&&window.instgrm.Embeds.process();else{if(!t.matches(".lazy-tiktok-facade"))return;o="tiktok",c="data-tiktok-html",n="tiktok-embed-script",d="https://www.tiktok.com/embed.js"}if(!o)return;const a=t.getAttribute(c);if(!a)return;try{const i=decodeURIComponent(escape(window.atob(a))),s=document.createElement("div");s.innerHTML=i;const l=s.firstChild;l&&(t.parentNode.replaceChild(l,t),d&&e(n,d,r))}catch(e){console.error("Error restoring embed for "+o,e)}}document.addEventListener("click",function(o){const c=o.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade");c&&t(c)},!1)})();</script>`;
 
 export const useCleaner = () => {
   const [isCleaning, setIsCleaning] = useState(false);
 
-  const cleanHtml = useCallback(async (html: string, options: CleaningOptions, apiKey: string) => {
+  const cleanHtml = useCallback(async (
+      apiKey: string, 
+      html: string, 
+      options: CleaningOptions, 
+      recommendations: Recommendation[] | null
+  ): Promise<{ cleanedHtml: string, summary: ImpactSummary, effectiveOptions: CleaningOptions }> => {
     setIsCleaning(true);
-    let nodesRemovedCount = 0;
+
+    let effectiveOptions = { ...options };
+    if (recommendations) {
+        recommendations.forEach(rec => {
+            const title = rec.title.toLowerCase();
+            if (title.includes('lazy load images')) effectiveOptions.lazyLoadImages = true;
+            if (title.includes('lazy load') && (title.includes('video') || title.includes('embed'))) effectiveOptions.lazyLoadEmbeds = true;
+            if (title.includes('defer') && title.includes('javascript')) effectiveOptions.deferScripts = true;
+            if (title.includes('optimize') && title.includes('css')) effectiveOptions.optimizeCssLoading = true;
+            if (title.includes('font')) effectiveOptions.optimizeFontLoading = true;
+        });
+    }
+
     const originalBytes = new TextEncoder().encode(html).length;
     
     let processedHtml = html;
-    if (options.semanticRewrite) {
+    if (effectiveOptions.semanticRewrite && apiKey) {
         processedHtml = await rewriteToSemanticHtml(apiKey, processedHtml);
     }
     
@@ -165,57 +186,73 @@ export const useCleaner = () => {
     const doc = parser.parseFromString(processedHtml, 'text/html');
     const originalNodeCount = doc.getElementsByTagName('*').length;
     let hasLazyEmbeds = false;
-    let headTagsToAdd = '';
-    const processedOrigins = new Set<string>();
-
-    if (options.lazyLoadEmbeds) {
+    
+    if (effectiveOptions.lazyLoadEmbeds) {
         processEmbeds(doc);
         if (doc.querySelector('.lazy-youtube-embed, .lazy-tweet-facade, .lazy-instagram-embed, .lazy-tiktok-facade')) {
             hasLazyEmbeds = true;
         }
     }
 
-    if (options.lazyLoadImages) {
-        const images = doc.querySelectorAll('img:not([loading="lazy"])');
+    if (effectiveOptions.lazyLoadImages) {
+        const images = doc.querySelectorAll('img');
         images.forEach((img, index) => {
-            if (index === 0) {
+            if (index < 2) { // Eager load first two images for LCP
+                img.setAttribute('loading', 'eager');
                 img.setAttribute('fetchpriority', 'high');
             } else {
                 img.setAttribute('loading', 'lazy');
+                img.setAttribute('decoding', 'async');
             }
-            img.setAttribute('decoding', 'async');
+        });
+    }
+    
+    if (effectiveOptions.deferScripts) {
+        doc.querySelectorAll('script[src]').forEach(script => {
+            const src = script.getAttribute('src');
+            if (src && src.toLowerCase().includes('jquery')) return;
+            if (!script.hasAttribute('defer') && !script.hasAttribute('async')) {
+                 script.setAttribute('defer', '');
+            }
         });
     }
 
-    if (options.optimizeFontLoading || options.addPrefetchHints) {
+    if (effectiveOptions.optimizeFontLoading) {
         doc.querySelectorAll('link[href*="fonts.googleapis.com/css"]').forEach(link => {
-            const googleApiOrigin = 'https://fonts.googleapis.com';
-            const gstaticOrigin = 'https://fonts.gstatic.com';
-
-            if (options.addPrefetchHints) {
-                if (!processedOrigins.has(googleApiOrigin)) {
-                    headTagsToAdd += `<link rel="preconnect" href="${googleApiOrigin}">\n`;
-                    processedOrigins.add(googleApiOrigin);
+            try {
+                const href = link.getAttribute('href');
+                if (!href) return;
+                const url = new URL(href, 'https://example.com');
+                 if (!url.searchParams.has('display')) {
+                    url.searchParams.set('display', 'swap');
+                    link.setAttribute('href', url.toString().replace('https://example.com', ''));
                 }
-                if (!processedOrigins.has(gstaticOrigin)) {
-                    headTagsToAdd += `<link rel="preconnect" href="${gstaticOrigin}" crossorigin>\n`;
-                    processedOrigins.add(gstaticOrigin);
-                }
-            }
-
-            if (options.optimizeFontLoading) {
-                try {
-                    const url = new URL(link.getAttribute('href')!, 'https://example.com');
-                     if (!url.searchParams.has('display')) {
-                        url.searchParams.set('display', 'swap');
-                        link.setAttribute('href', url.href.replace('https://example.com', ''));
+            } catch(e) { console.error("Could not parse font URL", e)}
+        });
+    }
+    
+    if (effectiveOptions.addPrefetchHints) {
+        const processedOrigins = new Set<string>();
+        doc.querySelectorAll('link[href*="fonts.googleapis.com"], link[href*="fonts.gstatic.com"]').forEach(link => {
+            const href = link.getAttribute('href');
+            try {
+                if (!href) return;
+                const url = new URL(href);
+                if (!processedOrigins.has(url.origin)) {
+                    const preconnect = doc.createElement('link');
+                    preconnect.rel = 'preconnect';
+                    preconnect.href = url.origin;
+                    if (url.origin.includes('gstatic')) {
+                        preconnect.setAttribute('crossorigin', '');
                     }
-                } catch(e) { console.error("Could not parse font URL", e)}
-            }
+                    doc.head.prepend(preconnect);
+                    processedOrigins.add(url.origin);
+                }
+            } catch (e) { console.warn('Could not parse URL for prefetch hint:', href, e); }
         });
     }
 
-    if (options.optimizeCssLoading) {
+    if (effectiveOptions.optimizeCssLoading) {
         doc.querySelectorAll('link[rel="stylesheet"]').forEach(stylesheet => {
             if (stylesheet.getAttribute('href')?.includes('fonts.googleapis.com')) return;
             stylesheet.setAttribute('media', 'print');
@@ -234,14 +271,14 @@ export const useCleaner = () => {
 
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (!options.lazyLoadEmbeds && options.preserveIframes && node.nodeName.toLowerCase() === 'iframe') continue;
-      if (options.preserveLinks && node.nodeName.toLowerCase() === 'a') continue;
-      if (options.preserveShortcodes && node.nodeType === Node.TEXT_NODE && /\[.*?\]/.test(node.textContent || '')) continue;
+      if (!effectiveOptions.lazyLoadEmbeds && effectiveOptions.preserveIframes && node.nodeName.toLowerCase() === 'iframe') continue;
+      if (effectiveOptions.preserveLinks && node.nodeName.toLowerCase() === 'a') continue;
+      if (effectiveOptions.preserveShortcodes && node.nodeType === Node.TEXT_NODE && /\[.*?\]/.test(node.textContent || '')) continue;
       
-      if (options.stripComments && node.nodeType === Node.COMMENT_NODE) {
+      if (effectiveOptions.stripComments && node.nodeType === Node.COMMENT_NODE) {
         nodesToRemove.push(node);
       }
-      if (options.removeEmptyAttributes && node.nodeType === Node.ELEMENT_NODE) {
+      if (effectiveOptions.removeEmptyAttributes && node.nodeType === Node.ELEMENT_NODE) {
         const element = node as Element;
         const attrsToRemove: string[] = [];
         for (let i = 0; i < element.attributes.length; i++) {
@@ -254,28 +291,23 @@ export const useCleaner = () => {
 
     nodesToRemove.forEach(node => {
         node.parentNode?.removeChild(node);
-        nodesRemovedCount++;
     });
 
-    let finalHtml = new XMLSerializer().serializeToString(doc.body).replace(/^<body[^>]*>|<\/body>$/g, '');
+    let finalHtml = doc.body.innerHTML;
 
-    if (headTagsToAdd) {
-        finalHtml = headTagsToAdd.trim() + '\n\n' + finalHtml;
-    }
-
-    if (options.minifyInlineCSSJS) {
-      finalHtml = finalHtml.replace(/<style.*?>([\s\S]*?)<\/style>/gi, (match, css) => {
-        const minifiedCss = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim();
+    if (effectiveOptions.minifyInlineCSSJS) {
+      finalHtml = finalHtml.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, css) => {
+        const minifiedCss = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(\r\n|\n|\r)/gm, "").replace(/\s+/g, ' ').trim();
         return `<style>${minifiedCss}</style>`;
       });
-      finalHtml = finalHtml.replace(/<script.*?>([\s\S]*?)<\/script>/gi, (match, js) => {
+      finalHtml = finalHtml.replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, (match, js) => {
         if (match.includes('src=')) return match;
         const minifiedJs = js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '').replace(/\s+/g, ' ').trim();
         return `<script>${minifiedJs}</script>`;
       });
     }
 
-    if (options.collapseWhitespace) {
+    if (effectiveOptions.collapseWhitespace) {
         finalHtml = finalHtml.replace(/>\s+</g, '><').trim();
     }
     
@@ -284,22 +316,21 @@ export const useCleaner = () => {
     }
 
     const cleanedBytes = new TextEncoder().encode(finalHtml).length;
-    const cleanedNodeCount = new DOMParser().parseFromString(finalHtml, 'text/html').getElementsByTagName('*').length;
-    nodesRemovedCount += (originalNodeCount - cleanedNodeCount);
+    const finalDocForCount = parser.parseFromString(finalHtml, 'text/html');
+    const cleanedNodeCount = finalDocForCount.querySelectorAll('*').length;
+    const nodesRemoved = Math.max(0, originalNodeCount - cleanedNodeCount);
+    const bytesSaved = Math.max(0, originalBytes - cleanedBytes);
 
-    const bytesSaved = originalBytes - cleanedBytes;
-    const estimatedSpeedGain = (bytesSaved / 1024 / 10).toFixed(2);
-
-    const summary = {
+    const summary: ImpactSummary = {
         originalBytes,
         cleanedBytes,
         bytesSaved,
-        nodesRemoved: nodesRemovedCount > 0 ? nodesRemovedCount : 0,
-        estimatedSpeedGain: estimatedSpeedGain,
+        nodesRemoved,
+        estimatedSpeedGain: originalBytes > 0 ? `${((bytesSaved / originalBytes) * 100).toFixed(1)}% size reduction` : '0.0% size reduction',
     };
     
     setIsCleaning(false);
-    return { cleanedHtml: finalHtml, summary };
+    return { cleanedHtml: finalHtml, summary, effectiveOptions };
   }, []);
 
   return { isCleaning, cleanHtml };
