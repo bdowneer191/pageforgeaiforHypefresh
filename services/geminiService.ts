@@ -101,7 +101,14 @@ export const rewriteToSemanticHtml = async (apiKey: string, html: string) => {
     return html;
   }
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = `You are an expert HTML developer. Rewrite the following HTML to use modern, semantic HTML5 tags. For example, convert <b> to <strong> and <i> to <em>. Ensure the structure and content remain identical. Preserve all <iframe>, <script>, <blockquote class="twitter-tweet">, <blockquote class="instagram-media">, and <blockquote class="tiktok-embed"> tags as they are. Do not add any explanation or surrounding text, only return the cleaned HTML code. Here is the HTML:\n\n${html}`;
+  const prompt = `You are an expert HTML developer tasked with cleaning up a blog post's HTML. Your goal is to apply semantic improvements without altering the content's structure or meaning.
+1.  Rewrite basic styling tags to their semantic HTML5 equivalents: \`<b>\` to \`<strong>\`, \`<i>\` to \`<em>\`.
+2.  **Crucially, you must preserve the original structure.** Do not move paragraphs inside blockquotes, or nest blockquotes incorrectly. A paragraph that is a sibling to a blockquote in the input must remain a sibling in the output.
+3.  **Preserve all special embed and script tags as they are.** This includes: \`<iframe>\`, \`<script>\`, and any \`<blockquote>\` element, especially those with classes like \`wp-block-quote\`, \`twitter-tweet\`, \`instagram-media\`, or \`tiktok-embed\`. Do not modify them or their contents.
+4.  Only return the raw, cleaned HTML code. Do not add any commentary, explanations, or surrounding text like \`\`\`html.
+
+Here is the HTML to clean:
+${html}`;
 
   try {
      const response = await ai.models.generateContent({
