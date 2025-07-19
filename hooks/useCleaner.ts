@@ -1,4 +1,5 @@
 
+
 import { useState, useCallback } from 'react';
 import { rewriteToSemanticHtml } from '../services/geminiService.ts';
 import { CleaningOptions, ImpactSummary, Recommendation } from '../types.ts';
@@ -186,7 +187,6 @@ export const useCleaner = () => {
   const [isCleaning, setIsCleaning] = useState(false);
 
   const cleanHtml = useCallback(async (
-      apiKey: string, 
       html: string, 
       options: CleaningOptions, 
       recommendations: Recommendation[] | null
@@ -207,13 +207,13 @@ export const useCleaner = () => {
 
     const originalBytes = new TextEncoder().encode(html).length;
     
-    let processedHtml = html;
-    if (effectiveOptions.semanticRewrite && apiKey) {
-        processedHtml = await rewriteToSemanticHtml(apiKey, processedHtml);
-    }
-    
     const parser = new DOMParser();
-    const doc = parser.parseFromString(processedHtml, 'text/html');
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // **ROBUSTNESS FIX**: Apply semantic rewrite directly to the doc object to prevent re-parsing issues.
+    if (effectiveOptions.semanticRewrite) {
+        rewriteToSemanticHtml(doc);
+    }
 
     // **CRITICAL FIX**: Pre-emptively remove any old, conflicting lazy-load scripts.
     doc.querySelectorAll('script').forEach(script => {
