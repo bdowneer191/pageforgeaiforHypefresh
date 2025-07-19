@@ -90,7 +90,8 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
             overflow: 'hidden',
             margin: '1rem auto',
             border: '1px solid #374151',
-            backgroundColor: '#000'
+            backgroundColor: '#000',
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
         });
 
         placeholder.innerHTML = `
@@ -192,7 +193,7 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
             background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
             color: 'white',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            transition: 'transform 0.2s ease'
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease'
         });
         
         placeholder.innerHTML = `
@@ -332,7 +333,88 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
     }
 };
 
-const lazyLoadScript = `<script id="pageforge-lazy-loader">(function(){"use strict";if(window.pageforgeLazyLoaderInitialized)return;window.pageforgeLazyLoaderInitialized=!0;function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function addHoverEffects(){document.querySelectorAll('.lazy-tweet-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#1d9bf0';el.style.transform='translateY(-2px)';el.style.boxShadow='0 8px 25px rgba(29,155,240,0.15)';const glow=el.querySelector('.hover-glow');if(glow)glow.style.opacity='0.1';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#2f3349';el.style.transform='translateY(0)';el.style.boxShadow='none';const glow=el.querySelector('.hover-glow');if(glow)glow.style.opacity='0';});});document.querySelectorAll('.lazy-instagram-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.transform='scale(1.02)';el.style.boxShadow='0 10px 30px rgba(240,148,51,0.2)';});el.addEventListener('mouseleave',()=>{el.style.transform='scale(1)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-tiktok-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#fe2c55';el.style.transform='translateY(-3px) scale(1.02)';el.style.boxShadow='0 10px 30px rgba(254,44,85,0.2)';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#25f4ee';el.style.transform='translateY(0) scale(1)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-reddit-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#ff4500';el.style.transform='translateY(-2px)';el.style.boxShadow='0 8px 25px rgba(255,69,0,0.15)';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#343536';el.style.transform='translateY(0)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-youtube-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.transform='scale(1.02)';el.style.boxShadow='0 10px 30px rgba(255,0,0,0.2)';});el.addEventListener('mouseleave',()=>{el.style.transform='scale(1)';el.style.boxShadow='none';});});}function t(t){if(t.matches(".lazy-youtube-facade")){const videoId=t.getAttribute('data-video-id');const originalSrc=t.getAttribute('data-original-src');if(!videoId||!originalSrc)return;const d=document.createElement("iframe");const n=new URL(originalSrc.startsWith("//")?("https:"+originalSrc):originalSrc);n.searchParams.set("autoplay","1");n.searchParams.set("rel","0");d.setAttribute("src",n.toString());d.setAttribute("frameborder","0");d.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");d.setAttribute("allowfullscreen","");d.style.cssText="width:100%;height:100%;border-radius:12px;";const wrapper=document.createElement('div');wrapper.style.cssText="position:relative;width:100%;max-width:"+t.style.maxWidth+";aspect-ratio:"+t.style.aspectRatio+";margin:1rem auto;";wrapper.appendChild(d);t.parentNode?.replaceChild(wrapper,t);return}const c=t.parentNode;if(!c)return;let d,n,o,r,a;if(t.matches(".lazy-tweet-facade"))d="tweet",n="data-tweet-html",o="twitter-wjs",r="https://platform.twitter.com/widgets.js",a=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(c);else if(t.matches(".lazy-instagram-facade"))d="instagram",n="data-insta-html",o="instagram-embed-script",r="https://www.instagram.com/embed.js",a=()=>window.instgrm&&window.instgrm.Embeds.process();else if(t.matches(".lazy-tiktok-facade"))d="tiktok",n="data-tiktok-html",o="tiktok-embed-script",r="https://www.tiktok.com/embed.js",a=null;else if(t.matches(".lazy-reddit-facade"))d="reddit",n="data-reddit-html",o="reddit-widgets-js",r="https://embed.reddit.com/widgets.js",a=null;else return;if(!d)return;const i=t.getAttribute(n);if(!i)return;try{const s=decodeURIComponent(escape(window.atob(i))),l=document.createElement("div");l.innerHTML=s;const m=l.firstChild;m&&(c.replaceChild(m,t),r&&e(o,r,a))}catch(error){console.error("Error loading social media embed:",error)}}document.addEventListener("click",function(e){const target=e.target.closest(".lazy-youtube-facade, .lazy-tweet-facade, .lazy-instagram-facade, .lazy-tiktok-facade, .lazy-reddit-facade");target&&t(target)});document.addEventListener("DOMContentLoaded",addHoverEffects);addHoverEffects()})();</script>`;
+const lazyLoadScript = `<script id="pageforge-lazy-loader">(function(){"use strict";if(window.pageforgeLazyLoaderInitialized)return;window.pageforgeLazyLoaderInitialized=!0;function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function addHoverEffects(){document.querySelectorAll('.lazy-tweet-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#1d9bf0';el.style.transform='translateY(-2px)';el.style.boxShadow='0 8px 25px rgba(29,155,240,0.15)';const glow=el.querySelector('.hover-glow');if(glow)glow.style.opacity='0.1';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#2f3349';el.style.transform='translateY(0)';el.style.boxShadow='none';const glow=el.querySelector('.hover-glow');if(glow)glow.style.opacity='0';});});document.querySelectorAll('.lazy-instagram-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.transform='scale(1.02)';el.style.boxShadow='0 10px 30px rgba(220,50,60,0.2)';});el.addEventListener('mouseleave',()=>{el.style.transform='scale(1)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-tiktok-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#fe2c55';el.style.transform='translateY(-3px) scale(1.02)';el.style.boxShadow='0 10px 30px rgba(254,44,85,0.2)';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#25f4ee';el.style.transform='translateY(0) scale(1)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-reddit-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#ff4500';el.style.transform='translateY(-2px)';el.style.boxShadow='0 8px 25px rgba(255,69,0,0.15)';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#343536';el.style.transform='translateY(0)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-youtube-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.transform='scale(1.02)';el.style.boxShadow='0 10px 30px rgba(255,0,0,0.2)';});el.addEventListener('mouseleave',()=>{el.style.transform='scale(1)';el.style.boxShadow='none';});});}function t(t){if(t.matches(".lazy-youtube-facade")){const videoId=t.getAttribute('data-video-id');const originalSrc=t.getAttribute('data-original-src');if(!videoId||!originalSrc)return;const d=document.createElement("iframe");const n=new URL(originalSrc.startsWith("//")?("https:"+originalSrc):originalSrc);n.searchParams.set("autoplay","1");n.searchParams.set("rel","0");d.setAttribute("src",n.toString());d.setAttribute("frameborder","0");d.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");d.setAttribute("allowfullscreen","");d.style.cssText="width:100%;height:100%;border-radius:12px;";const wrapper=document.createElement('div');wrapper.style.cssText="position:relative;width:100%;max-width:"+t.style.maxWidth+";aspect-ratio:"+t.style.aspectRatio+";margin:1rem auto;";wrapper.appendChild(d);t.parentNode?.replaceChild(wrapper,t);return}const c=t.parentNode;if(!c)return;let d,n,o,r,a;if(t.matches(".lazy-tweet-facade"))d="tweet",n="data-tweet-html",o="twitter-wjs",r="https://platform.twitter.com/widgets.js",a=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(c);else if(t.matches(".lazy-instagram-facade"))d="instagram",n="data-insta-html",o="instagram-embed-script",r="https://www.instagram.com/embed.js",a=()=>window.instgrm&&window.instgrm.Embeds.process();else if(t.matches(".lazy-tiktok-facade"))d="tiktok",n="data-tiktok-html",o="tiktok-embed-script",r="https://www.tiktok.com/embed.js",a=null;else if(t.matches(".lazy-reddit-facade"))d="reddit",n="data-reddit-html",o="reddit-widgets-js",r="https://embed.reddit.com/widgets.js",a=null;else return;if(!d)return;const i=t.getAttribute(n);if(!i)return;try{const s=decodeURIComponent(escape(window.atob(i))),l=document.createElement("div");l.innerHTML=s;const m=l.firstChild;m&&(c.replaceChild(m,t),r&&e(o,r,a))}catch(error){console.error("Error loading social media embed:",error)}}document.addEventListener("click",function(e){const target=e.target.closest(".lazy-youtube-facade, .lazy-tweet-facade, .lazy-instagram-facade, .lazy-tiktok-facade, .lazy-reddit-facade");target&&t(target)});document.addEventListener("DOMContentLoaded",addHoverEffects);addHoverEffects()})();</script>`;
+
+const optimizeSvgs = (doc: Document, actionLog: string[]) => {
+  let svgsOptimized = 0;
+  doc.querySelectorAll('svg').forEach(svg => {
+    let optimized = false;
+    const commentsToRemove: Comment[] = [];
+    const walker = doc.createTreeWalker(svg, NodeFilter.SHOW_COMMENT);
+    while (walker.nextNode()) {
+        commentsToRemove.push(walker.currentNode as Comment);
+    }
+    if (commentsToRemove.length > 0) {
+        optimized = true;
+        commentsToRemove.forEach(comment => comment.parentNode?.removeChild(comment));
+    }
+    
+    svg.querySelectorAll('metadata, title, desc').forEach(el => {
+        el.remove();
+        optimized = true;
+    });
+
+    if (optimized) {
+      svgsOptimized++;
+    }
+  });
+
+  if (svgsOptimized > 0) {
+    actionLog.push(`Optimized ${svgsOptimized} inline SVG(s) by removing metadata.`);
+  }
+};
+
+const addResponsiveSrcset = (doc: Document, actionLog: string[]) => {
+    let imagesUpdated = 0;
+    const cdnHosts = ['i0.wp.com', 'i1.wp.com', 'i2.wp.com', 'i3.wp.com', 'cloudinary.com', 'imgix.net'];
+    const breakpoints = [320, 480, 640, 768, 1024, 1280, 1536];
+
+    doc.querySelectorAll('img').forEach(img => {
+        if (img.hasAttribute('srcset')) return; 
+        const src = img.getAttribute('src');
+        if (!src) return;
+
+        try {
+            const url = new URL(src);
+            if (!cdnHosts.some(host => url.hostname.includes(host))) return;
+            
+            // Jetpack/Wordpress.com CDN support
+            if (url.hostname.includes('i0.wp.com') || url.hostname.includes('i1.wp.com') || url.hostname.includes('i2.wp.com') || url.hostname.includes('i3.wp.com')) {
+                const existingWidthParam = url.searchParams.get('w');
+                const imageWidthAttr = img.getAttribute('width');
+                let originalWidth: number | null = null;
+
+                if (existingWidthParam) {
+                    originalWidth = parseInt(existingWidthParam, 10);
+                } else if (imageWidthAttr) {
+                    originalWidth = parseInt(imageWidthAttr, 10);
+                }
+
+                if (!originalWidth) return;
+                
+                const srcset: string[] = [];
+                breakpoints.forEach(w => {
+                    if (w <= originalWidth!) {
+                        const newUrl = new URL(url.toString());
+                        newUrl.searchParams.set('w', w.toString());
+                        newUrl.searchParams.delete('h');
+                        newUrl.searchParams.delete('fit');
+                        srcset.push(`${newUrl.toString()} ${w}w`);
+                    }
+                });
+
+                if (srcset.length > 0) {
+                    img.setAttribute('srcset', srcset.join(', '));
+                    img.setAttribute('sizes', '(max-width: 800px) 100vw, 800px');
+                    imagesUpdated++;
+                }
+            }
+        } catch (e) { /* ignore invalid urls */ }
+    });
+    if (imagesUpdated > 0) {
+        actionLog.push(`Generated responsive srcset for ${imagesUpdated} image(s).`);
+    }
+};
 
 
 export const useCleaner = () => {
@@ -356,7 +438,7 @@ export const useCleaner = () => {
             if (title.includes('defer') && title.includes('javascript') && !effectiveOptions.deferScripts) { effectiveOptions.deferScripts = true; appliedAICount++; }
             if (title.includes('optimize') && title.includes('css') && !effectiveOptions.optimizeCssLoading) { effectiveOptions.optimizeCssLoading = true; appliedAICount++; }
             if (title.includes('font') && !effectiveOptions.optimizeFontLoading) { effectiveOptions.optimizeFontLoading = true; appliedAICount++; }
-            if ((title.includes('image format') || title.includes('webp')) && !effectiveOptions.optimizeImages) { effectiveOptions.optimizeImages = true; appliedAICount++; }
+            if ((title.includes('image format') || title.includes('webp') || title.includes('avif')) && !effectiveOptions.optimizeImages) { effectiveOptions.optimizeImages = true; appliedAICount++; }
         });
         if(appliedAICount > 0) actionLog.push(`Applied ${appliedAICount} AI recommendation(s).`);
     }
@@ -386,6 +468,69 @@ export const useCleaner = () => {
             hasLazyEmbeds = true;
         }
     }
+    
+    if (effectiveOptions.addResponsiveSrcset) {
+        addResponsiveSrcset(doc, actionLog);
+    }
+
+    if (effectiveOptions.optimizeImages) {
+        let convertedToWebpCount = 0;
+        let convertedToAvifCount = 0;
+        let sizedCount = 0;
+        const cdnHosts = ['i0.wp.com', 'i1.wp.com', 'i2.wp.com', 'i3.wp.com', 'cloudinary.com', 'imgix.net'];
+        
+        doc.querySelectorAll('img').forEach(img => {
+            let wasSized = false;
+            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+                const match = img.src.match(/-(\d+)[xX](\d+)\.(jpg|jpeg|png|webp|gif)/);
+                if (match && match[1] && match[2]) {
+                    img.setAttribute('width', match[1]);
+                    img.setAttribute('height', match[2]);
+                    wasSized = true;
+                }
+            }
+            if (wasSized) sizedCount++;
+            
+            let wasConverted = false;
+            const targetFormat = effectiveOptions.convertToAvif ? 'avif' : 'webp';
+
+            const convertUrl = (src: string | null): string | null => {
+                if (!src || src.includes('.svg') || src.startsWith('data:')) return src;
+                try {
+                    const url = new URL(src);
+                    if (cdnHosts.some(host => url.hostname.includes(host))) {
+                        if (!url.searchParams.has('format')) {
+                            url.searchParams.set('format', targetFormat);
+                            wasConverted = true;
+                            return url.toString();
+                        }
+                    }
+                } catch (e) { /* Ignore */ }
+                return src;
+            };
+
+            const newSrc = convertUrl(img.getAttribute('src'));
+            if (newSrc) img.setAttribute('src', newSrc);
+            
+            const srcset = img.getAttribute('srcset');
+            if (srcset) {
+                const newSrcset = srcset.split(',').map(part => {
+                    const [url, desc] = part.trim().split(/\s+/);
+                    const newUrl = convertUrl(url);
+                    return `${newUrl} ${desc || ''}`.trim();
+                }).join(', ');
+                img.setAttribute('srcset', newSrcset);
+            }
+            
+            if(wasConverted) {
+                if (targetFormat === 'avif') convertedToAvifCount++;
+                else convertedToWebpCount++;
+            }
+        });
+        if (sizedCount > 0) actionLog.push(`Added dimensions to ${sizedCount} image(s) to prevent layout shift.`);
+        if (convertedToAvifCount > 0) actionLog.push(`Converted ${convertedToAvifCount} image(s) to AVIF format.`);
+        if (convertedToWebpCount > 0) actionLog.push(`Converted ${convertedToWebpCount} image(s) to WebP format.`);
+    }
 
     if (effectiveOptions.lazyLoadImages) {
         const images = doc.querySelectorAll('img');
@@ -405,39 +550,8 @@ export const useCleaner = () => {
         if (lazyLoadedCount > 0) actionLog.push(`Lazy-loaded ${lazyLoadedCount} image(s).`);
     }
 
-    if (effectiveOptions.optimizeImages) {
-        let webpCount = 0;
-        let sizedCount = 0;
-        const cdnHosts = ['i0.wp.com', 'i1.wp.com', 'i2.wp.com', 'i3.wp.com', 'cloudinary.com', 'imgix.net'];
-        
-        doc.querySelectorAll('img').forEach(img => {
-            if (!img.hasAttribute('width') && !img.hasAttribute('height')) {
-                const match = img.src.match(/-(\d+)[xX](\d+)\.(jpg|jpeg|png|webp|gif)/);
-                if (match && match[1] && match[2]) {
-                    img.setAttribute('width', match[1]);
-                    img.setAttribute('height', match[2]);
-                    sizedCount++;
-                }
-            }
-
-            let src = img.getAttribute('src');
-            if (!src || src.includes('.svg') || src.startsWith('data:')) return;
-    
-            try {
-                const url = new URL(src);
-                if (cdnHosts.some(host => url.hostname.includes(host))) {
-                    if(!url.searchParams.has('format')) {
-                        url.searchParams.set('format', 'webp');
-                        img.setAttribute('src', url.toString());
-                        webpCount++;
-                    }
-                }
-            } catch (e) {
-                // Ignore invalid URLs
-            }
-        });
-        if (sizedCount > 0) actionLog.push(`Added dimensions to ${sizedCount} image(s) to prevent layout shift.`);
-        if (webpCount > 0) actionLog.push(`Converted ${webpCount} image(s) to WebP format.`);
+    if (effectiveOptions.optimizeSvgs) {
+        optimizeSvgs(doc, actionLog);
     }
     
     if (effectiveOptions.deferScripts) {
