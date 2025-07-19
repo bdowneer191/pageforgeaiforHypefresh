@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import netlifyIdentity from 'netlify-identity-widget';
 import Icon from './components/Icon.tsx';
@@ -10,7 +11,7 @@ import SessionTimer from './components/SessionTimer.tsx';
 import { useCleaner } from './hooks/useCleaner.ts';
 import { generateOptimizationPlan, generateComparisonAnalysis } from './services/geminiService.ts';
 import { fetchPageSpeedReport } from './services/pageSpeedService.ts';
-import { Recommendation, Session } from './types.ts';
+import { Recommendation, Session, ImpactSummary } from './types.ts';
 
 
 const initialOptions = {
@@ -196,7 +197,7 @@ const App = () => {
   const [originalHtml, setOriginalHtml] = useState('');
   const [cleanedHtml, setCleanedHtml] = useState('');
   const [options, setOptions] = useState(initialOptions);
-  const [impact, setImpact] = useState(null);
+  const [impact, setImpact] = useState<ImpactSummary | null>(null);
   const [copied, setCopied] = useState(false);
   const { isCleaning, cleanHtml } = useCleaner();
   const [aiAppliedNotification, setAiAppliedNotification] = useState('');
@@ -372,16 +373,7 @@ const App = () => {
     setImpact(summary);
     setOptions(effectiveOptions);
 
-    const userOptionsSet = new Set(Object.keys(options).filter(k => options[k]));
-    let appliedByAI = false;
-    for (const key in effectiveOptions) {
-        if (effectiveOptions[key] && !userOptionsSet.has(key)) {
-            appliedByAI = true;
-            break;
-        }
-    }
-
-    if (appliedByAI) {
+    if (summary.actionLog.some(log => log.includes('AI recommendation'))) {
         setAiAppliedNotification('AI recommendations have been automatically applied!');
         setTimeout(() => setAiAppliedNotification(''), 4000);
     }
@@ -605,7 +597,7 @@ const App = () => {
                     </button>
                 </Step>
                 
-                {cleanedHtml && (
+                {cleanedHtml && impact && (
                     <Step number="4" title="Get Cleaned Code & Compare">
                         <p className="text-sm text-gray-400 mb-3">Your cleaned HTML is ready. Copy it and replace the code in your post editor. Then, click "Compare Speed" in Step 1 to see the results.</p>
                         <div className="relative">
@@ -630,6 +622,14 @@ const App = () => {
                                 </div>
                             ))}
                         </div>
+                        {impact.actionLog && impact.actionLog.length > 0 && (
+                            <div className="mt-4">
+                                <h4 className="font-semibold text-gray-400 text-sm">Actions Performed:</h4>
+                                <ul className="list-disc list-inside text-sm text-gray-400 space-y-1 mt-2 p-3 bg-gray-850 rounded-lg">
+                                    {impact.actionLog.map((log, i) => <li key={i}>{log}</li>)}
+                                </ul>
+                            </div>
+                        )}
                     </Step>
                 )}
             </div>
