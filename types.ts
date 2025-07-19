@@ -23,7 +23,10 @@ export interface CleaningOptions {
   semanticRewrite: boolean;
   lazyLoadEmbeds: boolean;
   lazyLoadImages: boolean;
-  optimizeImages: boolean; // New high-impact image optimization
+  optimizeImages: boolean; // Main switch for WebP/AVIF
+  convertToAvif: boolean; // Upgrade to AVIF
+  addResponsiveSrcset: boolean; // Generate srcset/sizes
+  optimizeSvgs: boolean; // Minify inline SVGs
   optimizeCssLoading: boolean;
   optimizeFontLoading: boolean;
   addPrefetchHints: boolean;
