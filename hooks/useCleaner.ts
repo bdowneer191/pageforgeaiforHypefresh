@@ -204,7 +204,7 @@ const processEmbeds = (doc: Document, options: CleaningOptions) => {
                 script.id = id;
                 script.async = true;
                 script.onload = callback;
-                document.head.appendChild(script); // Scripts can stay in head, but main script must be in body
+                document.head.appendChild(script);
             }
 
             document.addEventListener('click', function(event) {
@@ -373,6 +373,8 @@ const optimizeLoading = (doc: Document, options: CleaningOptions) => {
         const stylesheets: (HTMLLinkElement | HTMLStyleElement)[] = Array.from(doc.querySelectorAll('link[rel="stylesheet"], style'));
 
         stylesheets.forEach(sheet => {
+            if (sheet.id === 'pageforge-facade-style') return;
+            
             const isGoogleFont = sheet.tagName === 'LINK' && sheet.getAttribute('href')?.includes('fonts.googleapis.com');
             if (isGoogleFont) return;
 
@@ -434,7 +436,7 @@ export const useCleaner = () => {
             const originalNodeCount = doc.querySelectorAll('*').length;
 
             // Run all cleaning and optimization passes
-            processNode(doc.documentElement, effectiveOptions);
+            processNode(doc.body, effectiveOptions);
             processImages(doc, effectiveOptions);
             processEmbeds(doc, effectiveOptions);
             optimizeLoading(doc, effectiveOptions);
