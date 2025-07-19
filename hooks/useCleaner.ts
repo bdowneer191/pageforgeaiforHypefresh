@@ -1,5 +1,4 @@
 
-
 import { useState, useCallback } from 'react';
 import { rewriteToSemanticHtml } from '../services/geminiService.ts';
 import { CleaningOptions, ImpactSummary, Recommendation } from '../types.ts';
@@ -30,10 +29,23 @@ const processEmbeds = (doc: Document) => {
         const videoIdMatch = src.match(/embed\/([^?&/]+)/);
         if (!videoIdMatch?.[1]) return;
         const videoId = videoIdMatch[1];
+        
+        // Add autoplay=1 to the src before encoding it, so it plays on click
+        try {
+            const fullUrl = src.startsWith('//') ? `https:${src}` : src;
+            const autoplayUrl = new URL(fullUrl);
+            autoplayUrl.searchParams.set('autoplay', '1');
+            autoplayUrl.searchParams.set('rel', '0');
+            iframe.setAttribute('src', autoplayUrl.toString());
+        } catch(e) {
+            console.warn('Could not modify YouTube src for autoplay', e);
+        }
 
         const placeholder = doc.createElement('div');
         placeholder.className = 'lazy-youtube-embed';
-        placeholder.setAttribute('data-src', src);
+        
+        const youtubeHtml = btoa(unescape(encodeURIComponent(iframe.outerHTML)));
+        placeholder.setAttribute('data-youtube-html', youtubeHtml);
         
         const width = iframe.getAttribute('width') || '560';
         const height = iframe.getAttribute('height') || '315';
@@ -150,7 +162,7 @@ const processEmbeds = (doc: Document) => {
     });
 };
 
-const lazyLoadScript = `<script>(function(){"use strict";function e(e,t,o){const c=document.getElementById(e);if(c)return void(o&&o());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,o&&(n.onload=o),document.head.appendChild(n)}function t(t){let o,c,n,d,r;if(t.matches(".lazy-youtube-embed")){const e=t.getAttribute("data-src");if(!e)return;const o=document.createElement("iframe");return o.setAttribute("src",e+"?autoplay=1&rel=0"),o.setAttribute("frameborder","0"),o.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"),o.setAttribute("allowfullscreen",""),o.style.cssText="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px",t.innerHTML="",void t.appendChild(o)}if(t.matches(".lazy-tweet-facade"))o="tweet",c="data-tweet-html",n="twitter-wjs",d="https://platform.twitter.com/widgets.js",r=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(t.parentNode);else if(t.matches(".lazy-instagram-embed"))o="instagram",c="data-insta-html",n="instagram-embed-script",d="https://www.instagram.com/embed.js",r=()=>window.instgrm&&window.instgrm.Embeds.process();else{if(!t.matches(".lazy-tiktok-facade"))return;o="tiktok",c="data-tiktok-html",n="tiktok-embed-script",d="https://www.tiktok.com/embed.js"}if(!o)return;const a=t.getAttribute(c);if(!a)return;try{const i=decodeURIComponent(escape(window.atob(a))),s=document.createElement("div");s.innerHTML=i;const l=s.firstChild;l&&(t.parentNode.replaceChild(l,t),d&&e(n,d,r))}catch(e){console.error("Error restoring embed for "+o,e)}}document.addEventListener("click",function(o){const c=o.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade");c&&t(c)},!1)})();</script>`;
+const lazyLoadScript = `<script>(function(){"use strict";function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function t(t){let c,d,n,o,r;if(t.matches(".lazy-youtube-embed"))c="youtube",d="data-youtube-html",o=null,r=null;else if(t.matches(".lazy-tweet-facade"))c="tweet",d="data-tweet-html",n="twitter-wjs",o="https://platform.twitter.com/widgets.js",r=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(t.parentNode);else if(t.matches(".lazy-instagram-embed"))c="instagram",d="data-insta-html",n="instagram-embed-script",o="https://www.instagram.com/embed.js",r=()=>window.instgrm&&window.instgrm.Embeds.process();else{if(!t.matches(".lazy-tiktok-facade"))return;c="tiktok",d="data-tiktok-html",n="tiktok-embed-script",o="https://www.tiktok.com/embed.js"}if(!c)return;const a=t.getAttribute(d);if(!a)return;try{const i=decodeURIComponent(escape(window.atob(a))),s=document.createElement("div");s.innerHTML=i;const l=s.firstChild;l&&(t.parentNode.replaceChild(l,t),o&&e(n,o,r))}catch(e){console.error("Error restoring embed for "+c,e)}}document.addEventListener("click",function(e){const c=e.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade");c&&t(c)},!1)})();</script>`;
 
 export const useCleaner = () => {
   const [isCleaning, setIsCleaning] = useState(false);
