@@ -1,538 +1,306 @@
 
+
 import { useState, useCallback } from 'react';
 import { rewriteToSemanticHtml } from '../services/geminiService.ts';
-import { CleaningOptions, ImpactSummary, Recommendation } from '../types.ts';
+import { CleaningOptions } from '../types.ts';
 
-// Basic minifiers
-const minifyCss = (css: string): string => {
-  return css
-    .replace(/\/\*[\s\S]*?\*\/|[\r\n\t]/g, '')
-    .replace(/ {2,}/g, ' ')
-    .replace(/ ([{:;}]) /g, '$1')
-    .replace(/([{:;}]) /g, '$1')
-    .replace(/(:) /g, ':')
-    .trim();
-};
-
-const minifyJs = (js: string): string => {
-  // This is a very basic minifier; a real-world app might use a more robust library.
-  return js.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').replace(/\s+/g, ' ').trim();
-};
-
-
-const processNode = (node: Node, options: CleaningOptions) => {
-    // 1. Strip comments
-    if (options.stripComments) {
-        if (node.nodeType === Node.COMMENT_NODE) {
-            node.parentNode?.removeChild(node);
-            return;
-        }
-    }
-
-    // 2. Collapse whitespace in text nodes
-    if (options.collapseWhitespace && node.nodeType === Node.TEXT_NODE && node.textContent) {
-        node.textContent = node.textContent.replace(/\s{2,}/g, ' ');
-    }
-    
-    if (node.nodeType === Node.ELEMENT_NODE) {
-        const element = node as HTMLElement;
-
-        // 3. Minify inline CSS/JS
-        if (options.minifyInlineCSSJS) {
-            if (element.tagName === 'STYLE' && element.textContent) {
-                element.textContent = minifyCss(element.textContent);
-            }
-            if (element.tagName === 'SCRIPT' && element.textContent && !element.getAttribute('src')) {
-                // Be careful with JSON-LD scripts
-                if (element.getAttribute('type') !== 'application/ld+json') {
-                    element.textContent = minifyJs(element.textContent);
-                }
-            }
-        }
-        
-        // 4. Remove empty attributes
-        if (options.removeEmptyAttributes) {
-            for (const attr of Array.from(element.attributes)) {
-                if (attr.value === '') {
-                    element.removeAttribute(attr.name);
-                }
-            }
-        }
-    }
-    
-    // Recursively process child nodes
-    if (node.hasChildNodes()) {
-        Array.from(node.childNodes).forEach(child => processNode(child, options));
-    }
-};
-
-const processImages = (doc: Document, options: CleaningOptions) => {
-    if (!options.lazyLoadImages) return;
-
-    const images = Array.from(doc.querySelectorAll('img'));
-    let imagesToSkip = 2; // Skip the first two images to protect LCP
-
-    images.forEach(img => {
-        // Add width/height from style attribute if they are missing, crucial for CLS
-        if (!img.hasAttribute('width') && img.style.width) {
-            const width = parseInt(img.style.width, 10);
-            if (!isNaN(width) && width > 0) {
-                img.setAttribute('width', width.toString());
-            }
-        }
-        if (!img.hasAttribute('height') && img.style.height) {
-            const height = parseInt(img.style.height, 10);
-            if (!isNaN(height) && height > 0) {
-                img.setAttribute('height', height.toString());
-            }
-        }
-
-        // "Compromise effects" by removing costly CSS properties for performance.
-        if (img.style.filter) img.style.filter = 'none';
-        if (img.style.boxShadow) img.style.boxShadow = 'none';
-        if (img.style.transform) img.style.transform = 'none';
-
-        // Lazy load all images except the first few (likely LCP)
-        if (imagesToSkip > 0) {
-             img.setAttribute('loading', 'eager');
-             img.setAttribute('fetchpriority', 'high');
-             imagesToSkip--;
-        } else {
-            img.setAttribute('loading', 'lazy');
-            img.setAttribute('decoding', 'async');
+const processEmbeds = (doc) => {
+    // --- NORMALIZATION PASS ---
+    // Convert modern WordPress embed blocks into standard formats that our lazy-loader can understand.
+    doc.querySelectorAll('figure.wp-block-embed-twitter').forEach(figure => {
+        const wrapper = figure.querySelector('.wp-block-embed__wrapper');
+        const url = wrapper?.textContent?.trim();
+        if (url && url.includes('twitter.com')) {
+            const tweetBlockquote = doc.createElement('blockquote');
+            tweetBlockquote.className = 'twitter-tweet';
+            const tweetLink = doc.createElement('a');
+            tweetLink.href = url;
+            tweetBlockquote.appendChild(tweetLink);
+            figure.parentNode?.replaceChild(tweetBlockquote, figure);
         }
     });
-};
 
-const processEmbeds = (doc: Document, options: CleaningOptions) => {
-    if (!options.lazyLoadEmbeds) return;
+    // --- LAZY-LOADING PASS ---
 
-    let youtubeFound = false;
-    doc.querySelectorAll('iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]').forEach(iframe => {
+    // YouTube
+    const youtubeIframes = doc.querySelectorAll('iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]');
+    youtubeIframes.forEach(iframe => {
         const src = iframe.getAttribute('src');
         if (!src) return;
+        const videoIdMatch = src.match(/embed\/([^?&/]+)/);
+        if (!videoIdMatch?.[1]) return;
+        const videoId = videoIdMatch[1];
 
-        const url = new URL(src);
-        const videoId = url.pathname.split('/').pop();
-        if (!videoId) return;
-
-        youtubeFound = true;
         const placeholder = doc.createElement('div');
-        placeholder.className = 'lazy-youtube-facade';
-        placeholder.setAttribute('data-videoid', videoId);
+        placeholder.className = 'lazy-youtube-embed';
+        placeholder.setAttribute('data-src', src);
         
-        const width = iframe.getAttribute('width') || '560';
-        const height = iframe.getAttribute('height') || '315';
-        placeholder.style.width = '100%';
-        placeholder.style.aspectRatio = `${width} / ${height}`;
-        placeholder.style.maxWidth = `${width}px`;
+        Object.assign(placeholder.style, {
+            position: 'relative',
+            cursor: 'pointer',
+            width: iframe.getAttribute('width') ? `${iframe.getAttribute('width')}px` : '100%',
+            maxWidth: '100%',
+            aspectRatio: '16/9',
+            backgroundImage: `url(https://i.ytimg.com/vi/${videoId}/hqdefault.jpg)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            borderRadius: '8px',
+            overflow: 'hidden'
+        });
 
-        placeholder.innerHTML = `<img src="https://i.ytimg.com/vi/${videoId}/hqdefault.jpg" alt="Video Thumbnail" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"><div class="play-button"></div>`;
-        
+        placeholder.innerHTML = `<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.2);"><svg style="width:68px;height:48px;filter:drop-shadow(0 0 5px rgba(0,0,0,0.5));" viewBox="0 0 68 48"><path d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#f00"></path><path d="M 45,24 27,14 27,34" fill="#fff"></path></svg></div>`;
         iframe.parentNode?.replaceChild(placeholder, iframe);
     });
 
-    let twitterFound = false;
-    doc.querySelectorAll('blockquote.twitter-tweet').forEach(tweetQuote => {
-        const tweetLink = tweetQuote.querySelector('a[href*="/status/"]');
-        if (!tweetLink) return;
-
-        twitterFound = true;
-        const tweetUrl = tweetLink.getAttribute('href');
-        if (!tweetUrl) return;
+    // Twitter
+    doc.querySelectorAll('blockquote.twitter-tweet').forEach(tweet => {
+        let nextSibling = tweet.nextElementSibling;
+        if (nextSibling?.tagName === 'SCRIPT' && nextSibling.src.includes('platform.twitter.com')) {
+            nextSibling.remove();
+        }
 
         const placeholder = doc.createElement('div');
-        placeholder.className = 'lazy-twitter-facade';
-        placeholder.setAttribute('data-tweet-url', tweetUrl);
+        placeholder.className = 'lazy-tweet-facade';
+
+        const tweetText = tweet.querySelector('p')?.textContent || 'A tweet from X.';
+        const authorMatch = (tweet.textContent || '').match(/— (.*?) \(@/);
+        const authorName = authorMatch ? authorMatch[1] : 'X User';
         
-        const twitterIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px; margin: 0 auto 8px; color: #38bdf8;"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`;
-        placeholder.innerHTML = `<div style="pointer-events: none;">${twitterIconSvg}<p style="font-size: 14px; margin: 0; font-weight: 500; color: #d1d5db;">Load Tweet</p><p style="font-size: 12px; color: #6b7280; margin: 4px 0 0;">Click to view this tweet</p></div>`;
-        tweetQuote.parentNode?.replaceChild(placeholder, tweetQuote);
+        Object.assign(placeholder.style, {
+            border: '1px solid #374151', borderRadius: '12px', padding: '16px', cursor: 'pointer',
+            backgroundColor: '#1a202c', color: '#e5e7eb', fontFamily: 'system-ui, sans-serif',
+            fontSize: '15px', lineHeight: '1.4', maxWidth: '550px', margin: '1rem auto'
+        });
+        
+        placeholder.innerHTML = `
+          <div style="display: flex; align-items: center; margin-bottom: 12px; pointer-events: none;">
+            <div style="width: 48px; height: 48px; background-color: #374151; border-radius: 9999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 12px;">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" style="width: 24px; height: 24px; color: #e5e7eb;"><g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></g></svg>
+            </div>
+            <div>
+              <strong style="font-weight: bold; color: #fff;">${authorName}</strong>
+              <div style="color: #8899a6;">View on X</div>
+            </div>
+          </div>
+          <p style="margin: 0 0 16px 0; color: #e5e7eb; pointer-events: none;">${tweetText.length > 150 ? tweetText.substring(0, 150) + '…' : tweetText}</p>
+          <div style="text-align: center; padding: 10px; border: 1px solid #374151; border-radius: 9999px; font-weight: bold; color: #fff; pointer-events: none;">
+            Load Tweet
+          </div>
+        `;
+        const tweetHtml = btoa(unescape(encodeURIComponent(tweet.outerHTML)));
+        placeholder.setAttribute('data-tweet-html', tweetHtml);
+        tweet.parentNode?.replaceChild(placeholder, tweet);
     });
 
-    let instagramFound = false;
-    doc.querySelectorAll('blockquote.instagram-media').forEach(igQuote => {
-        const postLink = igQuote.getAttribute('data-instgrm-permalink');
-        if (!postLink) return;
-
-        instagramFound = true;
+    // Instagram
+    doc.querySelectorAll('blockquote.instagram-media').forEach(insta => {
+        let nextSibling = insta.nextElementSibling;
+        if (nextSibling?.tagName === 'SCRIPT' && nextSibling.src.includes('instagram.com/embed.js')) {
+            nextSibling.remove();
+        }
+        
         const placeholder = doc.createElement('div');
-        placeholder.className = 'lazy-instagram-facade';
-        placeholder.setAttribute('data-post-url', postLink);
+        placeholder.className = 'lazy-instagram-embed';
         
-        const igIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="width: 32px; height: 32px; margin: 0 auto 8px;"><defs><radialGradient id="ig-grad" r="150%" cx="30%" cy="107%"><stop stop-color="#fdf497" offset="0"/><stop stop-color="#fd5949" offset="0.45"/><stop stop-color="#d6249f" offset="0.6"/><stop stop-color="#285AEB" offset="0.9"/></radialGradient></defs><path fill="url(#ig-grad)" d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.85s-.011 3.584-.069 4.85c-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07s-3.584-.012-4.85-.07c-3.252-.148-4.771-1.691-4.919-4.919-.058-1.265-.069-1.645-.069-4.85s.011-3.584.069-4.85c.149-3.225 1.664-4.771 4.919-4.919C8.356 2.175 8.741 2.163 12 2.163m0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948s.014 3.667.072 4.947c.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072s3.667-.014 4.947-.072c4.358-.2 6.78-2.618 6.98-6.98.059-1.281.073-1.689.073-4.948s-.014-3.667-.072-4.947c-.2-4.358-2.618-6.78-6.98-6.98C8.334 0.014 7.941 0 4.692 0H12zM12 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zm0 10.162a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.88 1.44 1.44 0 000-2.88z"/></svg>`;
-        placeholder.innerHTML = `<div style="pointer-events: none;">${igIconSvg}<p style="font-size: 14px; margin: 0; font-weight: 500; color: #d1d5db;">View on Instagram</p><p style="font-size: 12px; color: #6b7280; margin: 4px 0 0;">Click to load this post</p></div>`;
-        igQuote.parentNode?.replaceChild(placeholder, igQuote);
+        const instaHtml = btoa(unescape(encodeURIComponent(insta.outerHTML)));
+        placeholder.setAttribute('data-insta-html', instaHtml);
+        
+        Object.assign(placeholder.style, {
+            position: 'relative', cursor: 'pointer', width: '100%', maxWidth: '540px',
+            margin: '1rem auto', border: '1px solid #374151', borderRadius: '8px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            aspectRatio: '1/1.2', backgroundColor: '#1a202c', color: '#e5e7eb', fontFamily: 'sans-serif'
+        });
+        
+        placeholder.innerHTML = `<div style="pointer-events: none;"><svg style="width:32px;height:32px;margin-right:10px;display:inline-block;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg> Load Instagram Post</div>`;
+        insta.parentNode?.replaceChild(placeholder, insta);
     });
 
-    let tiktokFound = false;
-    doc.querySelectorAll('blockquote.tiktok-embed').forEach(tkQuote => {
-        const citeUrl = tkQuote.getAttribute('cite');
-        const videoId = tkQuote.getAttribute('data-video-id');
-        if (!citeUrl || !videoId) return;
+    // TikTok
+    doc.querySelectorAll('blockquote.tiktok-embed').forEach(tiktok => {
+        let nextSibling = tiktok.nextElementSibling;
+        if (nextSibling?.tagName === 'SCRIPT' && nextSibling.src.includes('tiktok.com/embed.js')) {
+            nextSibling.remove();
+        }
 
-        tiktokFound = true;
         const placeholder = doc.createElement('div');
         placeholder.className = 'lazy-tiktok-facade';
-        placeholder.setAttribute('data-cite-url', citeUrl);
-        placeholder.setAttribute('data-video-id', videoId);
-        
-        const tkIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" fill="currentColor" style="width: 28px; height: 28px; margin: 0 auto 8px; color: #6b7280;"><path d="M448 209.9a210.1 210.1 0 01-122.8-39.3V349.4A162.6 162.6 0 11185 188.3V277.2a74.6 74.6 0 1052.2 71.2V209.9a210.1 210.1 0 01122.8-39.3z" fill="#25f4ee"/><path d="M448 209.9a210.1 210.1 0 01-122.8-39.3V349.4A162.6 162.6 0 11185 188.3V277.2a74.6 74.6 0 1052.2 71.2V209.9a210.1 210.1 0 01122.8-39.3zM325.2 170.6V0h-81v277.2a74.6 74.6 0 1052.2 71.2V209.9a210.1 210.1 0 01-122.8-39.3V0h-81v188.3A162.6 162.6 0 110 349.4 162.6 162.6 0 01185 188.3V0h81v170.6a210.1 210.1 0 0181.4 39.3z" fill="#ff0050"/></svg>`;
-        placeholder.innerHTML = `<div style="pointer-events: none;">${tkIconSvg}<p style="font-size: 14px; margin: 0; font-weight: 500; color: #d1d5db;">View on TikTok</p><p style="font-size: 12px; color: #6b7280; margin: 4px 0 0;">Click to load this video</p></div>`;
-        tkQuote.parentNode?.replaceChild(placeholder, tkQuote);
-    });
+        Object.assign(placeholder.style, {
+            border: '1px solid #374151', borderRadius: '12px', padding: '16px', cursor: 'pointer',
+            backgroundColor: '#1a202c', color: '#e5e7eb', fontFamily: 'system-ui, sans-serif',
+            fontSize: '15px', lineHeight: '1.4', maxWidth: '325px', margin: '1rem auto'
+        });
 
-    let redditFound = false;
-    doc.querySelectorAll('blockquote.reddit-embed-bq').forEach(rdQuote => {
-        const postLink = rdQuote.querySelector('a[href*="/r/"]');
-        if (!postLink) return;
-
-        const postUrl = postLink.getAttribute('href');
-        if (!postUrl) return;
-
-        redditFound = true;
-        const placeholder = doc.createElement('div');
-        placeholder.className = 'lazy-reddit-facade';
-        placeholder.setAttribute('data-post-url', postUrl);
-
-        const rdIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 32px; height: 32px; margin: 0 auto 8px; color: #FF4500;"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.825 13.333c0 .552-.447 1-1 1s-1-.448-1-1v-2.333c0-.552.447-1 1-1s1 .448 1 1v2.333zm-6.65 2.5a1.167 1.167 0 110-2.333 1.167 1.167 0 010 2.333zm-4-2.5c0 .552-.447 1-1 1s-1-.448-1-1v-2.333c0-.552.447-1 1-1s1 .448 1 1v2.333zm.125-5.333c-.736 0-1.333.597-1.333 1.333s.597 1.333 1.333 1.333c.737 0 1.333-.597 1.333-1.333s-.596-1.333-1.333-1.333zm6.667 0c-.737 0-1.333.597-1.333 1.333s.596 1.333 1.333 1.333c.736 0 1.333-.597 1.333-1.333s-.597-1.333-1.333-1.333z"/><path d="M12 4.167c-1.38 0-2.5 1.12-2.5 2.5s1.12 2.5 2.5 2.5 2.5-1.12 2.5-2.5-1.12-2.5-2.5-2.5zm0 13.666c-3.308 0-6-2.692-6-6s2.692-6 6-6 6 2.692 6 6-2.692 6-6 6z" opacity=".3"/><path d="M12 17.833c3.308 0 6-2.692 6-6s-2.692-6-6-6-6 2.692-6 6 2.692 6 6 6zm-4.375-7c.736 0 1.333-.597 1.333-1.333S8.361 8.167 7.625 8.167c-.737 0-1.333.597-1.333 1.333s.596 1.333 1.333 1.333zm8.75 0c.737 0 1.333-.597 1.333-1.333s-.596-1.333-1.333-1.333c-.736 0-1.333.597-1.333 1.333s.597 1.333 1.333 1.333zm-4.375 4.834a1.167 1.167 0 100 2.333 1.167 1.167 0 000-2.333zm5.475-4.834v2.333c0 .552.447 1 1 1s1-.448 1-1v-2.333c0-.552-.447-1-1-1s-1 .448-1 1zm-10.95 0v2.333c0 .552.447 1 1 1s1-.448 1-1v-2.333c0-.552-.447-1-1-1s-1 .448-1 1z"/></svg>`;
-        placeholder.innerHTML = `<div style="pointer-events: none;">${rdIconSvg}<p style="font-size: 14px; margin: 0; font-weight: 500; color: #d1d5db;">View on Reddit</p><p style="font-size: 12px; color: #6b7280; margin: 4px 0 0;">Click to load this post</p></div>`;
-        rdQuote.parentNode?.replaceChild(placeholder, rdQuote);
-    });
-    
-    // Remove original embed scripts if we've replaced their blockquotes
-    if (twitterFound) doc.querySelectorAll('script[src*="platform.twitter.com/widgets.js"]').forEach(s => s.remove());
-    if (instagramFound) doc.querySelectorAll('script[src*="instagram.com/embed.js"]').forEach(s => s.remove());
-    if (tiktokFound) doc.querySelectorAll('script[src*="tiktok.com/embed.js"]').forEach(s => s.remove());
-    if (redditFound) doc.querySelectorAll('script[src*="embed.redditmedia.com/widgets.js"]').forEach(s => s.remove());
-
-    const hasFacades = youtubeFound || twitterFound || instagramFound || tiktokFound || redditFound;
-    
-    if (hasFacades && !doc.querySelector('#pageforge-facade-script')) {
-        const facadeScript = doc.createElement('script');
-        facadeScript.id = 'pageforge-facade-script';
-        facadeScript.textContent = `
-            // Injected by PageForge AI for lazy loading embeds
-            function loadScript(src, id, callback) {
-                const existingScript = document.getElementById(id);
-                if (existingScript) {
-                    if (callback) callback();
-                    return;
-                }
-                const script = document.createElement('script');
-                script.src = src;
-                script.id = id;
-                script.async = true;
-                script.onload = callback;
-                document.head.appendChild(script);
-            }
-
-            document.addEventListener('click', function(event) {
-                const target = event.target.closest('.lazy-youtube-facade, .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade, .lazy-reddit-facade');
-                if (!target) return;
-
-                if (target.matches('.lazy-youtube-facade') && !target.dataset.loaded) {
-                    target.dataset.loaded = 'true';
-                    const videoId = target.dataset.videoid;
-                    const iframe = document.createElement('iframe');
-                    iframe.setAttribute('src', 'https://www.youtube.com/embed/' + videoId + '?autoplay=1&rel=0');
-                    iframe.setAttribute('frameborder', '0');
-                    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
-                    iframe.setAttribute('allowfullscreen', '');
-                    iframe.style.width = '100%';
-                    iframe.style.height = '100%';
-                    target.innerHTML = '';
-                    target.style.aspectRatio = 'auto';
-                    target.appendChild(iframe);
-                }
-                
-                else if (target.matches('.lazy-twitter-facade') && !target.dataset.loading) {
-                    target.dataset.loading = 'true';
-                    const tweetUrl = target.dataset.tweetUrl;
-                    if (!tweetUrl) return;
-                    target.style.cursor = 'default';
-                    target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center;">Loading Tweet...</p>';
-                    
-                    const renderTweet = () => {
-                        if (window.twttr && window.twttr.widgets) {
-                            const tweetContainer = document.createElement('div');
-                            tweetContainer.innerHTML = '<blockquote class="twitter-tweet" data-dnt="true"><a href="' + tweetUrl + '"></a></blockquote>';
-                            target.innerHTML = '';
-                            target.style.cssText = 'border: none; padding: 0; background-color: transparent;';
-                            target.appendChild(tweetContainer);
-                            window.twttr.widgets.load(target);
-                        }
-                    };
-                    loadScript('https://platform.twitter.com/widgets.js', 'twitter-wjs', renderTweet);
-                }
-
-                else if (target.matches('.lazy-instagram-facade') && !target.dataset.loading) {
-                    target.dataset.loading = 'true';
-                    const postUrl = target.dataset.postUrl;
-                    if (!postUrl) return;
-                    target.style.cursor = 'default';
-                    target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center;">Loading Instagram Post...</p>';
-
-                    const renderInstagram = () => {
-                        if (window.instgrm) {
-                            const embedContainer = document.createElement('div');
-                            const blockquote = document.createElement('blockquote');
-                            blockquote.className = 'instagram-media';
-                            blockquote.setAttribute('data-instgrm-permalink', postUrl);
-                            blockquote.setAttribute('data-instgrm-version', '14');
-                            embedContainer.appendChild(blockquote);
-                            target.innerHTML = '';
-                            target.style.cssText = 'border: none; padding: 0; background-color: transparent;';
-                            target.appendChild(embedContainer);
-                            window.instgrm.Embeds.process();
-                        }
-                    };
-                    loadScript('https://www.instagram.com/embed.js', 'instagram-wjs', renderInstagram);
-                }
-
-                else if (target.matches('.lazy-tiktok-facade') && !target.dataset.loading) {
-                    target.dataset.loading = 'true';
-                    const citeUrl = target.dataset.citeUrl;
-                    const videoId = target.dataset.videoId;
-                    if (!citeUrl || !videoId) return;
-
-                    target.style.cursor = 'default';
-                    target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center;">Loading TikTok...</p>';
-                    
-                    const blockquote = document.createElement('blockquote');
-                    blockquote.className = 'tiktok-embed';
-                    blockquote.setAttribute('cite', citeUrl);
-                    blockquote.setAttribute('data-video-id', videoId);
-                    blockquote.style.cssText = 'max-width: 605px; min-width: 325px; margin: 1rem auto;';
-                    blockquote.innerHTML = '<section><a target="_blank" href="' + citeUrl + '">Watch video on TikTok</a></section>';
-                    
-                    target.innerHTML = '';
-                    target.style.cssText = 'border: none; padding: 0; background-color: transparent;';
-                    target.appendChild(blockquote);
-                    
-                    loadScript('https://www.tiktok.com/embed.js', 'tiktok-wjs');
-                }
-                
-                else if (target.matches('.lazy-reddit-facade') && !target.dataset.loading) {
-                    target.dataset.loading = 'true';
-                    const postUrl = target.dataset.postUrl;
-                    if (!postUrl) return;
-
-                    target.style.cursor = 'default';
-                    target.innerHTML = '<p style="font-size: 14px; color: #9ca3af; text-align: center;">Loading Reddit Post...</p>';
-
-                    const blockquote = document.createElement('blockquote');
-                    blockquote.className = 'reddit-embed-bq';
-                    blockquote.setAttribute('data-embed-height', '500'); 
-                    
-                    const link = document.createElement('a');
-                    link.href = postUrl;
-                    link.textContent = postUrl;
-                    blockquote.appendChild(link);
-                    
-                    target.innerHTML = '';
-                    target.style.cssText = 'border: none; padding: 0; background-color: transparent; min-height: 200px;';
-                    target.appendChild(blockquote);
-                    
-                    loadScript('https://embed.redditmedia.com/widgets/platform.js', 'reddit-wjs');
-                }
-            });
+        placeholder.innerHTML = `
+            <div style="display: flex; align-items: center; margin-bottom: 12px; pointer-events: none;">
+                <img src="https://sf16-website-login.dl.tiktokcdn.com/obj/tiktok_web_login_static/tiktok/site/static/images/logo-dark.svg" alt="TikTok" style="height: 28px; filter: brightness(0) invert(1);">
+            </div>
+            <p style="margin: 0 0 16px 0; color: #e5e7eb; pointer-events: none;">A video from TikTok.</p>
+            <div style="text-align: center; padding: 10px; border: 1px solid #374151; border-radius: 9999px; font-weight: bold; color: #fff; pointer-events: none;">
+                Load TikTok Video
+            </div>
         `;
-        doc.body.appendChild(facadeScript);
-
-        const facadeStyles = doc.createElement('style');
-        facadeStyles.id = 'pageforge-facade-style';
-        facadeStyles.textContent = `
-            .lazy-youtube-facade { position: relative; cursor: pointer; background-color: #000; margin: 1rem auto; border-radius: 8px; overflow: hidden; }
-            .lazy-youtube-facade .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 68px; height: 48px; background: rgba(0,0,0,0.6); border-radius: 10px; pointer-events: none; }
-            .lazy-youtube-facade .play-button::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-40%, -50%); border-style: solid; border-width: 12px 0 12px 20px; border-color: transparent transparent transparent white; }
-            .lazy-youtube-facade:hover .play-button { background: rgba(255,0,0,0.8); }
-            .lazy-twitter-facade, .lazy-instagram-facade, .lazy-tiktok-facade, .lazy-reddit-facade { border: 1px solid #374151; border-radius: 12px; padding: 16px; background-color: #1f2937; color: #9ca3af; min-height: 120px; display: flex; align-items: center; justify-content: center; text-align: center; cursor: pointer; font-family: sans-serif; margin: 1rem auto; transition: background-color 0.2s; max-width: 540px; }
-            .lazy-twitter-facade:hover, .lazy-instagram-facade:hover, .lazy-tiktok-facade:hover, .lazy-reddit-facade:hover { background-color: #374151; }
-        `;
-        doc.body.appendChild(facadeStyles);
-    }
+        const tiktokHtml = btoa(unescape(encodeURIComponent(tiktok.outerHTML)));
+        placeholder.setAttribute('data-tiktok-html', tiktokHtml);
+        tiktok.parentNode?.replaceChild(placeholder, tiktok);
+    });
 };
 
-const optimizeLoading = (doc: Document, options: CleaningOptions) => {
-    if (options.optimizeFontLoading) {
+const lazyLoadScript = `<script>(function(){"use strict";function e(t,c,o){const n=document.getElementById(t);if(n)return void(o&&o());const d=document.createElement("script");d.id=t,d.src=c,d.async=!0,o&&(d.onload=o),document.head.appendChild(d)}function t(t){if(t.matches(".lazy-youtube-embed")){const c=t.getAttribute("data-src");if(!c)return;const o=document.createElement("iframe");return o.setAttribute("src",c+"?autoplay=1"),o.setAttribute("frameborder","0"),o.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"),o.setAttribute("allowfullscreen",""),o.style.cssText="position:absolute;top:0;left:0;width:100%;height:100%;",t.innerHTML="",void t.appendChild(o)}let c,o,n,d,r;if(t.matches(".lazy-tweet-facade"))c="tweet",o="data-tweet-html",n="twitter-wjs",d="https://platform.twitter.com/widgets.js",r=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(t.parentNode);else if(t.matches(".lazy-instagram-embed"))c="instagram",o="data-insta-html",n="instagram-embed-script",d="https://www.instagram.com/embed.js",r=()=>window.instgrm&&window.instgrm.Embeds.process();else{if(!t.matches(".lazy-tiktok-facade"))return;c="tiktok",o="data-tiktok-html",n="tiktok-embed-script",d="https://www.tiktok.com/embed.js"}if(!c)return;const a=t.getAttribute(o);if(!a)return;try{const i=decodeURIComponent(escape(window.atob(a))),s=document.createElement("div");s.innerHTML=i;const l=s.firstChild;l&&(t.parentNode.replaceChild(l,t),d&&e(n,d,r))}catch(e){console.error("Error restoring embed for "+c,e)}}document.addEventListener("click",function(e){const c=e.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade");c&&t(c)},!1)})();</script>`;
+
+export const useCleaner = () => {
+  const [isCleaning, setIsCleaning] = useState(false);
+
+  const cleanHtml = useCallback(async (html: string, options: CleaningOptions, apiKey: string) => {
+    setIsCleaning(true);
+    let nodesRemovedCount = 0;
+    const originalBytes = new TextEncoder().encode(html).length;
+    
+    let processedHtml = html;
+    if (options.semanticRewrite) {
+        processedHtml = await rewriteToSemanticHtml(apiKey, processedHtml);
+    }
+    
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(processedHtml, 'text/html');
+    const originalNodeCount = doc.getElementsByTagName('*').length;
+    let hasLazyEmbeds = false;
+    let headTagsToAdd = '';
+    const processedOrigins = new Set<string>();
+
+    if (options.lazyLoadEmbeds) {
+        processEmbeds(doc);
+        if (doc.querySelector('.lazy-youtube-embed, .lazy-tweet-facade, .lazy-instagram-embed, .lazy-tiktok-facade')) {
+            hasLazyEmbeds = true;
+        }
+    }
+
+    if (options.lazyLoadImages) {
+        const images = doc.querySelectorAll('img:not([loading="lazy"])');
+        images.forEach((img, index) => {
+            if (index === 0) {
+                img.setAttribute('fetchpriority', 'high');
+            } else {
+                img.setAttribute('loading', 'lazy');
+            }
+            img.setAttribute('decoding', 'async');
+        });
+    }
+
+    if (options.optimizeFontLoading || options.addPrefetchHints) {
         doc.querySelectorAll('link[href*="fonts.googleapis.com/css"]').forEach(link => {
-            const href = link.getAttribute('href');
-            if (href) {
-                const url = new URL(href, 'https://example.com');
-                if (!url.searchParams.has('display')) {
-                    url.searchParams.append('display', 'swap');
-                    link.setAttribute('href', url.href);
+            const googleApiOrigin = 'https://fonts.googleapis.com';
+            const gstaticOrigin = 'https://fonts.gstatic.com';
+
+            if (options.addPrefetchHints) {
+                if (!processedOrigins.has(googleApiOrigin)) {
+                    headTagsToAdd += `<link rel="preconnect" href="${googleApiOrigin}">\n`;
+                    processedOrigins.add(googleApiOrigin);
+                }
+                if (!processedOrigins.has(gstaticOrigin)) {
+                    headTagsToAdd += `<link rel="preconnect" href="${gstaticOrigin}" crossorigin>\n`;
+                    processedOrigins.add(gstaticOrigin);
                 }
             }
-        });
-    }
 
-    if (options.addPrefetchHints) {
-        const domains = new Set<string>();
-        doc.querySelectorAll('link[href*="fonts.googleapis.com"], link[href*="fonts.gstatic.com"]').forEach(link => {
-            const href = link.getAttribute('href');
-            if (href) {
+            if (options.optimizeFontLoading) {
                 try {
-                    const url = new URL(href);
-                    domains.add(url.origin);
-                } catch (e) {
-                    console.warn('Could not parse URL for prefetch hint:', href, e);
-                }
-            }
-        });
-
-        domains.forEach(domain => {
-            if (!doc.querySelector(`link[rel="preconnect"][href="${domain}"]`)) {
-                const preconnect = doc.createElement('link');
-                preconnect.rel = 'preconnect';
-                preconnect.href = domain;
-                doc.head.prepend(preconnect);
-            }
-        });
-    }
-
-    if (options.deferScripts) {
-        doc.querySelectorAll('script[src]').forEach(script => {
-            const src = script.getAttribute('src');
-            // Avoid deferring critical scripts like jQuery or navigation handlers
-            if (src && src.toLowerCase().includes('jquery')) {
-                return;
-            }
-            if (!script.hasAttribute('defer') && !script.hasAttribute('async') && !script.textContent?.includes('wp-block-navigation-link')) {
-                 script.setAttribute('defer', '');
+                    const url = new URL(link.getAttribute('href')!, 'https://example.com');
+                     if (!url.searchParams.has('display')) {
+                        url.searchParams.set('display', 'swap');
+                        link.setAttribute('href', url.href.replace('https://example.com', ''));
+                    }
+                } catch(e) { console.error("Could not parse font URL", e)}
             }
         });
     }
 
     if (options.optimizeCssLoading) {
-        const criticalKeywords = [
-            'body', 'font', '@font-face', 'h1', 'h2', 'h3', 'header', 'nav', 'menu', 'hero', 'logo', 'button', 'input', 
-            'above-the-fold', 'main-content', 'entry-header', 'featured-image', 'post-title', 'site-header', 
-            'main-navigation', 'grid', 'flex', 'container', 'wrapper', 'wp-block', 'elementor', 'critical', 'style',
-            'navbar', 'primary', 'footer-widgets'
-        ];
-        const keywordRegex = new RegExp(criticalKeywords.join('|'), 'i');
-
-        const stylesheets: (HTMLLinkElement | HTMLStyleElement)[] = Array.from(doc.querySelectorAll('link[rel="stylesheet"], style'));
-
-        stylesheets.forEach(sheet => {
-            if (sheet.id === 'pageforge-facade-style') return;
-            
-            const isGoogleFont = sheet.tagName === 'LINK' && sheet.getAttribute('href')?.includes('fonts.googleapis.com');
-            if (isGoogleFont) return;
-
-            let content = '';
-            if (sheet.tagName === 'STYLE') {
-                content = sheet.textContent || '';
-            } else if (sheet.tagName === 'LINK') {
-                // In a browser environment, we can't read external stylesheet content directly.
-                // The regex will apply to the URL, which might catch some cases like `.../critical-styles.css`
-                content = sheet.getAttribute('href') || '';
-            }
-
-            if (!keywordRegex.test(content)) {
-                sheet.setAttribute('media', 'print');
-                sheet.setAttribute('onload', "this.media='all'");
-
-                // Add noscript fallback for links
-                if (sheet.tagName === 'LINK') {
-                    const noscript = doc.createElement('noscript');
-                    const newLink = sheet.cloneNode() as HTMLLinkElement;
-                    newLink.removeAttribute('media');
-                    newLink.removeAttribute('onload');
-                    noscript.appendChild(newLink);
-                    sheet.parentNode?.insertBefore(noscript, sheet.nextSibling);
-                }
-            }
+        doc.querySelectorAll('link[rel="stylesheet"]').forEach(stylesheet => {
+            if (stylesheet.getAttribute('href')?.includes('fonts.googleapis.com')) return;
+            stylesheet.setAttribute('media', 'print');
+            stylesheet.setAttribute('onload', "this.onload=null;this.media='all'");
+            const noscript = doc.createElement('noscript');
+            const fallbackLink = stylesheet.cloneNode(true) as HTMLLinkElement;
+            fallbackLink.removeAttribute('media');
+            fallbackLink.removeAttribute('onload');
+            noscript.appendChild(fallbackLink);
+            stylesheet.parentNode?.insertBefore(noscript, stylesheet.nextSibling);
         });
     }
-};
 
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_ALL);
+    const nodesToRemove: Node[] = [];
 
-export const useCleaner = () => {
-    const [isCleaning, setIsCleaning] = useState(false);
-
-    const cleanHtml = useCallback(async (
-        geminiApiKey: string,
-        html: string,
-        options: CleaningOptions,
-        recommendations: Recommendation[] | null
-    ): Promise<{ cleanedHtml: string, summary: ImpactSummary, effectiveOptions: CleaningOptions }> => {
-        setIsCleaning(true);
-
-        try {
-            let effectiveOptions = { ...options };
-            if (recommendations) {
-                recommendations.forEach(rec => {
-                    const title = rec.title.toLowerCase();
-                    if (title.includes('lazy load images')) effectiveOptions.lazyLoadImages = true;
-                    if (title.includes('lazy load') && (title.includes('video') || title.includes('embed'))) effectiveOptions.lazyLoadEmbeds = true;
-                    if (title.includes('defer') && title.includes('javascript')) effectiveOptions.deferScripts = true;
-                    if (title.includes('optimize') && title.includes('css')) effectiveOptions.optimizeCssLoading = true;
-                    if (title.includes('font')) effectiveOptions.optimizeFontLoading = true;
-                });
-            }
-
-            const originalBytes = new TextEncoder().encode(html).length;
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const originalNodeCount = doc.querySelectorAll('*').length;
-
-            // Run all cleaning and optimization passes
-            processNode(doc.body, effectiveOptions);
-            processImages(doc, effectiveOptions);
-            processEmbeds(doc, effectiveOptions);
-            optimizeLoading(doc, effectiveOptions);
-            
-            // Extract facade script and styles to protect them from the AI rewrite step.
-            const facadeScriptEl = doc.getElementById('pageforge-facade-script');
-            const facadeStyleEl = doc.getElementById('pageforge-facade-style');
-            const facadeScriptHtml = facadeScriptEl ? facadeScriptEl.outerHTML : '';
-            const facadeStyleHtml = facadeStyleEl ? facadeStyleEl.outerHTML : '';
-
-            // Remove them from the doc before getting the innerHTML for the AI
-            facadeScriptEl?.remove();
-            facadeStyleEl?.remove();
-
-            let htmlForRewrite = doc.body.innerHTML;
-
-            // AI-powered rewrite is a subsequent step
-            if (effectiveOptions.semanticRewrite && geminiApiKey) {
-                htmlForRewrite = await rewriteToSemanticHtml(geminiApiKey, htmlForRewrite);
-            }
-
-            // Combine the rewritten HTML with the preserved facade code.
-            const finalHtml = htmlForRewrite + facadeStyleHtml + facadeScriptHtml;
-
-
-            const cleanedBytes = new TextEncoder().encode(finalHtml).length;
-            // To get an accurate node count, we need to parse the final HTML again,
-            // but this time without the script/style tags if we don't want to count them.
-            const finalDocForCount = parser.parseFromString(htmlForRewrite, 'text/html');
-            const cleanedNodeCount = finalDocForCount.querySelectorAll('*').length;
-            
-            const summary: ImpactSummary = {
-                originalBytes,
-                cleanedBytes,
-                bytesSaved: Math.max(0, originalBytes - cleanedBytes),
-                nodesRemoved: Math.max(0, originalNodeCount - cleanedNodeCount),
-                estimatedSpeedGain: `${((Math.max(0, originalBytes - cleanedBytes) / originalBytes) * 100).toFixed(1)}% size reduction`,
-            };
-
-            return { cleanedHtml: finalHtml, summary, effectiveOptions };
-        } catch (error) {
-            console.error("Error during HTML cleaning:", error);
-            // Return original HTML in case of error
-            return {
-                cleanedHtml: html,
-                summary: { originalBytes: 0, cleanedBytes: 0, bytesSaved: 0, nodesRemoved: 0, estimatedSpeedGain: 'Error' },
-                effectiveOptions: options
-            };
-        } finally {
-            setIsCleaning(false);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!options.lazyLoadEmbeds && options.preserveIframes && node.nodeName.toLowerCase() === 'iframe') continue;
+      if (options.preserveLinks && node.nodeName.toLowerCase() === 'a') continue;
+      if (options.preserveShortcodes && node.nodeType === Node.TEXT_NODE && /\[.*?\]/.test(node.textContent || '')) continue;
+      
+      if (options.stripComments && node.nodeType === Node.COMMENT_NODE) {
+        nodesToRemove.push(node);
+      }
+      if (options.removeEmptyAttributes && node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        const attrsToRemove: string[] = [];
+        for (let i = 0; i < element.attributes.length; i++) {
+          const attr = element.attributes[i];
+          if (attr.value.trim() === '') attrsToRemove.push(attr.name);
         }
-    }, []);
+        attrsToRemove.forEach(attrName => element.removeAttribute(attrName));
+      }
+    }
 
-    return { isCleaning, cleanHtml };
+    nodesToRemove.forEach(node => {
+        node.parentNode?.removeChild(node);
+        nodesRemovedCount++;
+    });
+
+    let finalHtml = new XMLSerializer().serializeToString(doc.body).replace(/^<body[^>]*>|<\/body>$/g, '');
+
+    if (headTagsToAdd) {
+        finalHtml = headTagsToAdd.trim() + '\n\n' + finalHtml;
+    }
+
+    if (options.minifyInlineCSSJS) {
+      finalHtml = finalHtml.replace(/<style.*?>([\s\S]*?)<\/style>/gi, (match, css) => {
+        const minifiedCss = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim();
+        return `<style>${minifiedCss}</style>`;
+      });
+      finalHtml = finalHtml.replace(/<script.*?>([\s\S]*?)<\/script>/gi, (match, js) => {
+        if (match.includes('src=')) return match;
+        const minifiedJs = js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '').replace(/\s+/g, ' ').trim();
+        return `<script>${minifiedJs}</script>`;
+      });
+    }
+
+    if (options.collapseWhitespace) {
+        finalHtml = finalHtml.replace(/>\s+</g, '><').trim();
+    }
+    
+    if (hasLazyEmbeds) {
+        finalHtml += lazyLoadScript;
+    }
+
+    const cleanedBytes = new TextEncoder().encode(finalHtml).length;
+    const cleanedNodeCount = new DOMParser().parseFromString(finalHtml, 'text/html').getElementsByTagName('*').length;
+    nodesRemovedCount += (originalNodeCount - cleanedNodeCount);
+
+    const bytesSaved = originalBytes - cleanedBytes;
+    const estimatedSpeedGain = (bytesSaved / 1024 / 10).toFixed(2);
+
+    const summary = {
+        originalBytes,
+        cleanedBytes,
+        bytesSaved,
+        nodesRemoved: nodesRemovedCount > 0 ? nodesRemovedCount : 0,
+        estimatedSpeedGain: estimatedSpeedGain,
+    };
+    
+    setIsCleaning(false);
+    return { cleanedHtml: finalHtml, summary };
+  }, []);
+
+  return { isCleaning, cleanHtml };
 };
