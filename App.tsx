@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import netlifyIdentity from 'netlify-identity-widget';
 import Icon from './components/Icon.tsx';
@@ -22,6 +23,7 @@ const initialOptions = {
   preserveShortcodes: true,
   lazyLoadEmbeds: true,
   lazyLoadImages: true,
+  optimizeImages: true,
   semanticRewrite: false,
   optimizeCssLoading: false, // Default false, as it can be risky but powerful
   optimizeFontLoading: true,
@@ -576,6 +578,7 @@ const App = () => {
                         <h4 className="font-semibold text-green-300 text-sm pt-2">Performance Optimizations</h4>
                          <div className="space-y-1">
                             <CheckboxOption name="lazyLoadImages" label="Lazy Load Images" checked={options.lazyLoadImages} onChange={handleOptionChange} isRecommended description="Loads images on scroll. First image is loaded eagerly for LCP."/>
+                            <CheckboxOption name="optimizeImages" label="Optimize Images (to WebP)" checked={options.optimizeImages} onChange={handleOptionChange} isRecommended description="Converts images to WebP and resizes them (requires compatible CDN, e.g., Jetpack)."/>
                             <CheckboxOption name="lazyLoadEmbeds" label="Lazy Load Embeds" checked={options.lazyLoadEmbeds} onChange={handleOptionChange} isRecommended description="Replaces YouTube, etc., with facades that load on click."/>
                             <CheckboxOption name="optimizeFontLoading" label="Optimize Font Loading" checked={options.optimizeFontLoading} onChange={handleOptionChange} isRecommended description="Adds 'display=swap' to Google Fonts to prevent invisible text."/>
                             <CheckboxOption name="addPrefetchHints" label="Add Preconnect Hints" checked={options.addPrefetchHints} onChange={handleOptionChange} isRecommended description="Speeds up connection to domains like Google Fonts."/>
