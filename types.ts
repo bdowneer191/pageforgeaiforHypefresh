@@ -1,3 +1,5 @@
+
+
 export interface Session {
   id?: string;
   url: string;
@@ -34,6 +36,7 @@ export interface ImpactSummary {
   bytesSaved: number;
   nodesRemoved: number;
   estimatedSpeedGain: string;
+  actionLog: string[]; // Detailed log of actions taken
 }
 
 export interface Recommendation {
