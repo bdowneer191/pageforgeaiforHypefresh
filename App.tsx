@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import netlifyIdentity from 'netlify-identity-widget';
 import Icon from './components/Icon.tsx';
