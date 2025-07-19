@@ -31,6 +31,9 @@ export interface CleaningOptions {
   optimizeFontLoading: boolean;
   addPrefetchHints: boolean;
   deferScripts: boolean;
+  lazyLoadBackgroundImages: boolean;
+  progressiveImageLoading: boolean;
+  optimizeVideoElements: boolean;
 }
 
 export interface ImpactSummary {
