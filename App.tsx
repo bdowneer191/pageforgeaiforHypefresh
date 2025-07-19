@@ -25,14 +25,17 @@ const initialOptions = {
   lazyLoadEmbeds: true,
   lazyLoadImages: true,
   optimizeImages: true,
-  convertToAvif: false, // Default to WebP, AVIF is opt-in
+  convertToAvif: false, 
   addResponsiveSrcset: true,
   optimizeSvgs: true,
   semanticRewrite: false,
-  optimizeCssLoading: false, // Default false, as it can be risky but powerful
+  optimizeCssLoading: false, 
   optimizeFontLoading: true,
   addPrefetchHints: true,
   deferScripts: true,
+  lazyLoadBackgroundImages: true,
+  progressiveImageLoading: true,
+  optimizeVideoElements: true,
 };
 
 const Step = ({ number, title, children }) => (
@@ -572,8 +575,8 @@ const App = () => {
 
                         <h4 className="font-semibold text-green-300 text-sm pt-2">Performance Optimizations</h4>
                          <div className="space-y-1">
-                            <CheckboxOption name="lazyLoadImages" label="Lazy Load Images" checked={options.lazyLoadImages} onChange={handleOptionChange} isRecommended description="Loads images on scroll. First image is loaded eagerly for LCP."/>
-                            <CheckboxOption name="lazyLoadEmbeds" label="Lazy Load Embeds" checked={options.lazyLoadEmbeds} onChange={handleOptionChange} isRecommended description="Replaces YouTube, etc., with facades that load on click."/>
+                            <CheckboxOption name="lazyLoadImages" label="Lazy Load Images" checked={options.lazyLoadImages} onChange={handleOptionChange} isRecommended description="Loads images as they enter the viewport."/>
+                            <CheckboxOption name="lazyLoadEmbeds" label="Lazy Load Social Embeds" checked={options.lazyLoadEmbeds} onChange={handleOptionChange} isRecommended description="Replaces YouTube, X, etc., with facades that load on scroll."/>
                             <CheckboxOption name="optimizeFontLoading" label="Optimize Font Loading" checked={options.optimizeFontLoading} onChange={handleOptionChange} isRecommended description="Adds 'display=swap' to Google Fonts to prevent invisible text."/>
                             <CheckboxOption name="addPrefetchHints" label="Add Preconnect Hints" checked={options.addPrefetchHints} onChange={handleOptionChange} isRecommended description="Speeds up connection to domains like Google Fonts."/>
                             <CheckboxOption name="deferScripts" label="Defer Non-Essential JavaScript" checked={options.deferScripts} onChange={handleOptionChange} isRecommended description="Prevents JavaScript from blocking page rendering."/>
@@ -611,6 +614,32 @@ const App = () => {
                                 onChange={handleOptionChange} 
                                 description="Removes unnecessary data and comments from inline SVG code."
                             />
+                             <h5 className="font-semibold text-cyan-300 text-sm pt-3">Advanced Media Optimizations</h5>
+                              <CheckboxOption 
+                                  name="progressiveImageLoading" 
+                                  label="Progressive Image Loading (Blur-up)" 
+                                  checked={options.progressiveImageLoading} 
+                                  onChange={handleOptionChange}
+                                  disabled={!options.lazyLoadImages}
+                                  isRecommended
+                                  description="Shows a tiny, blurred placeholder that loads into the full image. Improves perceived speed."
+                              />
+                              <CheckboxOption 
+                                  name="lazyLoadBackgroundImages" 
+                                  label="Lazy Load Background Images" 
+                                  checked={options.lazyLoadBackgroundImages} 
+                                  onChange={handleOptionChange} 
+                                  isRecommended 
+                                  description="Finds and lazy-loads CSS background images set via inline styles."
+                              />
+                              <CheckboxOption 
+                                  name="optimizeVideoElements" 
+                                  label="Optimize HTML5 <video> Elements" 
+                                  checked={options.optimizeVideoElements} 
+                                  onChange={handleOptionChange}
+                                  isRecommended
+                                  description="Replaces <video> tags with a lightweight facade that loads on scroll."
+                              />
                         </div>
                         
                         <h4 className="font-semibold text-yellow-300 text-sm pt-2">Advanced (AI)</h4>
