@@ -1,10 +1,10 @@
-
 import { useState, useCallback } from 'react';
 import { rewriteToSemanticHtml } from '../services/geminiService.ts';
 import { CleaningOptions, ImpactSummary, Recommendation } from '../types.ts';
 
 const processEmbeds = (doc: Document, actionLog: string[]) => {
     let embedsFound = 0;
+    
     // --- NORMALIZATION PASS ---
     doc.querySelectorAll('figure.wp-block-embed-twitter').forEach(figure => {
         const wrapper = figure.querySelector('.wp-block-embed__wrapper');
@@ -61,7 +61,7 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
 
     // --- LAZY-LOADING PASS ---
 
-    // YouTube
+    // YouTube - Fixed implementation with proper facade
     doc.querySelectorAll('iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]').forEach(iframe => {
         const src = iframe.getAttribute('src');
         if (!src) return;
@@ -70,8 +70,9 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
         const videoId = videoIdMatch[1];
         
         const placeholder = doc.createElement('div');
-        placeholder.className = 'lazy-youtube-embed';
-        placeholder.setAttribute('data-src', src);
+        placeholder.className = 'lazy-youtube-facade';
+        placeholder.setAttribute('data-video-id', videoId);
+        placeholder.setAttribute('data-original-src', src);
         
         const width = iframe.getAttribute('width') || '560';
         const height = iframe.getAttribute('height') || '315';
@@ -82,20 +83,34 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
             width: '100%',
             maxWidth: `${width}px`,
             aspectRatio: `${width} / ${height}`,
-            backgroundImage: `url(https://i.ytimg.com/vi/${videoId}/hqdefault.jpg)`,
+            backgroundImage: `url(https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg)`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            borderRadius: '8px',
+            borderRadius: '12px',
             overflow: 'hidden',
-            margin: '1rem auto'
+            margin: '1rem auto',
+            border: '1px solid #374151',
+            backgroundColor: '#000'
         });
 
-        placeholder.innerHTML = `<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.2);"><svg style="width:68px;height:48px;filter:drop-shadow(0 0 5px rgba(0,0,0,0.5));" viewBox="0 0 68 48"><path d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#f00"></path><path d="M 45,24 27,14 27,34" fill="#fff"></path></svg></div>`;
+        placeholder.innerHTML = `
+            <div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);pointer-events:none;">
+                <div style="display:flex;flex-direction:column;align-items:center;color:#fff;">
+                    <svg style="width:68px;height:48px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.8));margin-bottom:12px;" viewBox="0 0 68 48">
+                        <path d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#f00"></path>
+                        <path d="M 45,24 27,14 27,34" fill="#fff"></path>
+                    </svg>
+                    <div style="text-align:center;padding:8px 16px;background:rgba(0,0,0,0.7);border-radius:20px;font-size:14px;font-weight:500;border:1px solid rgba(255,255,255,0.2);">
+                        Load YouTube Video
+                    </div>
+                </div>
+            </div>
+        `;
         iframe.parentNode?.replaceChild(placeholder, iframe);
         embedsFound++;
     });
 
-    // Twitter
+    // Twitter - Enhanced facade
     doc.querySelectorAll('blockquote.twitter-tweet').forEach(tweet => {
         const nextSibling = tweet.nextElementSibling;
         if (nextSibling instanceof HTMLScriptElement && nextSibling.src.includes('platform.twitter.com')) {
@@ -105,38 +120,51 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
         const placeholder = doc.createElement('div');
         placeholder.className = 'lazy-tweet-facade';
 
-        const tweetText = tweet.querySelector('p')?.textContent || 'A tweet from X.';
+        const tweetText = tweet.querySelector('p')?.textContent || 'A post from X.';
         const authorMatch = (tweet.textContent || '').match(/— (.*?) \(@/);
         const authorName = authorMatch ? authorMatch[1] : 'X User';
+        const tweetUrl = tweet.querySelector('a')?.href || '';
         
         Object.assign(placeholder.style, {
-            border: '1px solid #374151', borderRadius: '12px', padding: '16px', cursor: 'pointer',
-            backgroundColor: '#1a202c', color: '#e5e7eb', fontFamily: 'system-ui, sans-serif',
-            fontSize: '15px', lineHeight: '1.4', maxWidth: '550px', margin: '1rem auto'
+            border: '1px solid #2f3349',
+            borderRadius: '16px',
+            padding: '20px',
+            cursor: 'pointer',
+            backgroundColor: '#16181c',
+            color: '#e7e9ea',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+            fontSize: '15px',
+            lineHeight: '1.4',
+            maxWidth: '550px',
+            margin: '1rem auto',
+            transition: 'all 0.2s ease',
+            position: 'relative'
         });
         
         placeholder.innerHTML = `
           <div style="display: flex; align-items: center; margin-bottom: 12px; pointer-events: none;">
-            <div style="width: 48px; height: 48px; background-color: #374151; border-radius: 9999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 12px;">
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" style="width: 24px; height: 24px; color: #e5e7eb;"><g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></g></svg>
+            <div style="width: 48px; height: 48px; background: linear-gradient(45deg, #1d9bf0, #1a8cd8); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 12px;">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="white" style="width: 20px; height: 20px;"><g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></g></svg>
             </div>
             <div>
-              <strong style="font-weight: bold; color: #fff;">${authorName}</strong>
-              <div style="color: #8899a6;">View on X</div>
+              <div style="font-weight: 700; color: #e7e9ea; font-size: 15px;">${authorName}</div>
+              <div style="color: #71767b; font-size: 14px; margin-top: 1px;">@${authorName.toLowerCase().replace(/\s/g, '')}</div>
             </div>
           </div>
-          <p style="margin: 0 0 16px 0; color: #e5e7eb; pointer-events: none;">${tweetText.length > 150 ? tweetText.substring(0, 150) + '…' : tweetText}</p>
-          <div style="text-align: center; padding: 10px; border: 1px solid #374151; border-radius: 9999px; font-weight: bold; color: #fff; pointer-events: none;">
-            Load Tweet
+          <p style="margin: 0 0 16px 0; color: #e7e9ea; pointer-events: none; white-space: pre-wrap;">${tweetText.length > 200 ? tweetText.substring(0, 200) + '…' : tweetText}</p>
+          <div style="text-align: center; padding: 12px 24px; background: #1d9bf0; border-radius: 50px; font-weight: 700; color: white; pointer-events: none; transition: background-color 0.2s;">
+            Load X Post
           </div>
+          <div style="position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px; border-radius: 18px; background: linear-gradient(45deg, #1d9bf0, #1a8cd8); opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: -1;" class="hover-glow"></div>
         `;
+        
         const tweetHtml = btoa(unescape(encodeURIComponent(tweet.outerHTML)));
         placeholder.setAttribute('data-tweet-html', tweetHtml);
         tweet.parentNode?.replaceChild(placeholder, tweet);
         embedsFound++;
     });
 
-    // Instagram
+    // Instagram - Enhanced facade
     doc.querySelectorAll('blockquote.instagram-media').forEach(insta => {
         const nextSibling = insta.nextElementSibling;
         if (nextSibling instanceof HTMLScriptElement && nextSibling.src.includes('instagram.com/embed.js')) {
@@ -144,24 +172,48 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
         }
         
         const placeholder = doc.createElement('div');
-        placeholder.className = 'lazy-instagram-embed';
+        placeholder.className = 'lazy-instagram-facade';
         
         const instaHtml = btoa(unescape(encodeURIComponent(insta.outerHTML)));
         placeholder.setAttribute('data-insta-html', instaHtml);
         
         Object.assign(placeholder.style, {
-            position: 'relative', cursor: 'pointer', width: '100%', maxWidth: '540px',
-            margin: '1rem auto', border: '1px solid #374151', borderRadius: '8px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            aspectRatio: '1/1.2', backgroundColor: '#1a202c', color: '#e5e7eb', fontFamily: 'sans-serif'
+            position: 'relative',
+            cursor: 'pointer',
+            width: '100%',
+            maxWidth: '540px',
+            margin: '1rem auto',
+            border: '1px solid #dbdbdb',
+            borderRadius: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            aspectRatio: '1/1.1',
+            background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+            color: 'white',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            transition: 'transform 0.2s ease'
         });
         
-        placeholder.innerHTML = `<div style="pointer-events: none;"><svg style="width:32px;height:32px;margin-right:10px;display:inline-block;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg> Load Instagram Post</div>`;
+        placeholder.innerHTML = `
+            <div style="pointer-events: none; text-align: center;">
+                <svg style="width:48px;height:48px;margin-bottom:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                </svg>
+                <div style="font-size:18px;font-weight:600;margin-bottom:8px;">Instagram Post</div>
+                <div style="padding:10px 20px;background:rgba(255,255,255,0.2);border-radius:25px;font-weight:500;backdrop-filter:blur(10px);">
+                    Load Content
+                </div>
+            </div>
+        `;
         insta.parentNode?.replaceChild(placeholder, insta);
         embedsFound++;
     });
 
-    // TikTok
+    // TikTok - New enhanced implementation
     doc.querySelectorAll('blockquote.tiktok-embed').forEach(tiktok => {
         const nextSibling = tiktok.nextElementSibling;
         if (nextSibling instanceof HTMLScriptElement && nextSibling.src.includes('tiktok.com/embed.js')) {
@@ -170,19 +222,49 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
 
         const placeholder = doc.createElement('div');
         placeholder.className = 'lazy-tiktok-facade';
+        
         Object.assign(placeholder.style, {
-            border: '1px solid #374151', borderRadius: '12px', padding: '16px', cursor: 'pointer',
-            backgroundColor: '#1a202c', color: '#e5e7eb', fontFamily: 'system-ui, sans-serif',
-            fontSize: '15px', lineHeight: '1.4', maxWidth: '325px', margin: '1rem auto'
+            border: '2px solid #25f4ee',
+            borderRadius: '16px',
+            padding: '20px',
+            cursor: 'pointer',
+            background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
+            color: '#ffffff',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            fontSize: '15px',
+            lineHeight: '1.4',
+            maxWidth: '325px',
+            margin: '1rem auto',
+            textAlign: 'center',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease'
         });
 
+        const tiktokText = tiktok.textContent?.trim() || '';
+        const captionMatch = tiktokText.match(/@[\w.]+ (.*?)(?= - |$)/);
+        const caption = captionMatch ? captionMatch[1] : 'TikTok video';
+        const authorMatch = tiktokText.match(/@([\w.]+)/);
+        const author = authorMatch ? authorMatch[1] : 'tiktokuser';
+
         placeholder.innerHTML = `
-            <div style="display: flex; align-items: center; margin-bottom: 12px; pointer-events: none;">
-                <img src="https://sf16-website-login.dl.tiktokcdn.com/obj/tiktok_web_login_static/tiktok/site/static/images/logo-dark.svg" alt="TikTok" style="height: 28px; filter: brightness(0) invert(1);">
-            </div>
-            <p style="margin: 0 0 16px 0; color: #e5e7eb; pointer-events: none;">A video from TikTok.</p>
-            <div style="text-align: center; padding: 10px; border: 1px solid #374151; border-radius: 9999px; font-weight: bold; color: #fff; pointer-events: none;">
-                Load TikTok Video
+            <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(45deg, #25f4ee, #fe2c55);opacity:0.1;"></div>
+            <div style="position:relative;z-index:1;pointer-events:none;">
+                <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                    <div style="width:40px;height:40px;background:#25f4ee;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-right:12px;">
+                        <svg style="width:24px;height:24px;color:#000;" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>
+                        </svg>
+                    </div>
+                    <div style="text-align:left;">
+                        <div style="font-weight:700;font-size:16px;margin-bottom:2px;">@${author}</div>
+                        <div style="color:#25f4ee;font-size:14px;">TikTok Video</div>
+                    </div>
+                </div>
+                <p style="margin: 0 0 20px 0; color: #ffffff; font-size:14px; opacity:0.9;">${caption.length > 80 ? caption.substring(0, 80) + '…' : caption}</p>
+                <div style="padding: 12px 24px; background: linear-gradient(135deg, #25f4ee, #fe2c55); border-radius: 25px; font-weight: 700; color: #000; display: inline-block;">
+                    ▶ Load Video
+                </div>
             </div>
         `;
         const tiktokHtml = btoa(unescape(encodeURIComponent(tiktok.outerHTML)));
@@ -191,7 +273,7 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
         embedsFound++;
     });
     
-    // Reddit
+    // Reddit - Enhanced implementation
     doc.querySelectorAll('blockquote.reddit-card, iframe[src*="reddit.com/embed"]').forEach(card => {
         const nextSibling = card.nextElementSibling;
         if (nextSibling instanceof HTMLScriptElement && nextSibling.src.includes('embed.reddit.com')) {
@@ -199,291 +281,56 @@ const processEmbeds = (doc: Document, actionLog: string[]) => {
         }
         
         const placeholder = doc.createElement('div');
-        placeholder.className = 'lazy-reddit-embed';
+        placeholder.className = 'lazy-reddit-facade';
         
         Object.assign(placeholder.style, {
-            border: '1px solid #374151',
-            borderRadius: '8px',
-            padding: '16px',
+            border: '1px solid #343536',
+            borderRadius: '12px',
+            padding: '20px',
             cursor: 'pointer',
-            backgroundColor: '#1a202c',
-            color: '#e5e7eb',
-            fontFamily: 'system-ui, sans-serif',
-            fontSize: '15px',
+            backgroundColor: '#1a1a1b',
+            color: '#d7dadc',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            fontSize: '14px',
             maxWidth: '550px',
             margin: '1rem auto',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: '112px'
+            position: 'relative',
+            transition: 'all 0.2s ease'
         });
+
+        const redditText = card.textContent?.trim() || '';
+        const titleMatch = redditText.match(/r\/\w+.*?(?=submitted|Posted)/);
+        const title = titleMatch ? titleMatch[0] : 'Reddit Post';
+        const subredditMatch = redditText.match(/r\/(\w+)/);
+        const subreddit = subredditMatch ? subredditMatch[1] : 'reddit';
         
-        placeholder.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 48px; height: 48px; color: #ff4500; margin-bottom: 12px;"><path d="M12.0001 21.6001C17.3026 21.6001 21.6001 17.3026 21.6001 12.0001C21.6001 6.69757 17.3026 2.40002 12.0001 2.40002C6.69757 2.40002 2.40002 6.69757 2.40002 12.0001C2.40002 17.3026 6.69757 21.6001 12.0001 21.6001ZM12.0001 19.2001C8.02952 19.2001 4.80002 15.9706 4.80002 12.0001C4.80002 8.02952 8.02952 4.80002 12.0001 4.80002C15.9706 4.80002 19.2001 8.02952 19.2001 12.0001C19.2001 15.9706 15.9706 19.2001 12.0001 19.2001ZM12.0001 11.5201C11.1669 11.5201 10.4688 11.1235 10.012 10.4668C9.93922 10.356 9.80942 10.3013 9.67562 10.3341L7.75122 10.8241C7.62772 10.8543 7.53032 10.9631 7.51992 11.0906C7.50952 11.218 7.59002 11.3342 7.71212 11.3592L9.63652 11.8492C10.0384 12.8258 10.9416 13.5201 12.0001 13.5201C13.0585 13.5201 13.9617 12.8258 14.3636 11.8492L16.288 11.3592C16.4101 11.3342 16.4906 11.218 16.4802 11.0906C16.4698 10.9631 16.3724 10.8543 16.2489 10.8241L14.3245 10.3341C14.1907 10.3013 14.0609 10.356 13.9881 10.4668C13.5313 11.1235 12.8332 11.5201 12.0001 11.5201ZM8.40002 8.76002C8.99522 8.76002 9.48002 8.27522 9.48002 7.68002C9.48002 7.08482 8.99522 6.60002 8.40002 6.60002C7.80482 6.60002 7.32002 7.08482 7.32002 7.68002C7.32002 8.27522 7.80482 8.76002 8.40002 8.76002ZM15.6001 8.76002C16.1953 8.76002 16.6801 8.27522 16.6801 7.68002C16.6801 7.08482 16.1953 6.60002 15.6001 6.60002C15.0049 6.60002 14.5201 7.08482 14.5201 7.68002C14.5201 8.27522 15.0049 8.76002 15.6001 8.76002ZM14.4553 15.1118C14.2237 14.7891 13.8823 14.5715 13.5013 14.4981C12.8713 14.3781 11.1298 14.3781 10.4998 14.4981C10.1188 14.5715 9.77742 14.7891 9.54492 15.1118C9.32472 15.4184 9.25542 15.7981 9.35622 16.1558C9.45702 16.5134 9.71802 16.8122 10.0717 16.9634C10.8718 17.3018 13.1283 17.3018 13.9284 16.9634C14.2821 16.8122 14.5431 16.5134 14.6439 16.1558C14.7447 15.7981 14.6754 15.4184 14.4553 15.1118Z" /></svg><strong style="font-weight: bold; color: #fff;">Load Reddit Post</strong></div>`;
+        placeholder.innerHTML = `
+            <div style="display: flex; align-items: center; margin-bottom: 16px; pointer-events: none;">
+                <div style="width: 40px; height: 40px; background: #ff4500; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="width: 20px; height: 20px;">
+                        <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+                    </svg>
+                </div>
+                <div>
+                    <div style="font-weight: 700; color: #d7dadc; font-size: 15px;">r/${subreddit}</div>
+                    <div style="color: #818384; font-size: 12px;">Reddit Post</div>
+                </div>
+            </div>
+            <p style="margin: 0 0 16px 0; color: #d7dadc; pointer-events: none; font-weight: 500;">${title.length > 120 ? title.substring(0, 120) + '…' : title}</p>
+            <div style="text-align: center; padding: 10px 20px; background: #ff4500; border-radius: 20px; font-weight: 700; color: white; pointer-events: none; transition: background-color 0.2s;">
+                Load Reddit Post
+            </div>
+        `;
     
         const cardHtml = btoa(unescape(encodeURIComponent(card.outerHTML)));
         placeholder.setAttribute('data-reddit-html', cardHtml);
         card.parentNode?.replaceChild(placeholder, card);
         embedsFound++;
     });
+    
     if (embedsFound > 0) {
       actionLog.push(`Created lazy-load facades for ${embedsFound} social media embed(s).`);
     }
 };
-
-const lazyLoadScript = `<script id="pageforge-lazy-loader">(function(){"use strict";if(window.pageforgeLazyLoaderInitialized)return;window.pageforgeLazyLoaderInitialized=!0;function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function t(t){if(t.matches(".lazy-youtube-embed")){const c=t.getAttribute("data-src");if(!c)return;const d=document.createElement("iframe"),n=new URL(c.startsWith("//")?("https:"+c):c);n.searchParams.set("autoplay","1"),n.searchParams.set("rel","0"),d.setAttribute("src",n.toString()),d.setAttribute("frameborder","0"),d.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"),d.setAttribute("allowfullscreen",""),d.style.cssText="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px;",t.innerHTML="",t.appendChild(d);return}const c=t.parentNode;if(!c)return;let d,n,o,r,a;if(t.matches(".lazy-tweet-facade"))d="tweet",n="data-tweet-html",o="twitter-wjs",r="https://platform.twitter.com/widgets.js",a=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(c);else if(t.matches(".lazy-instagram-embed"))d="instagram",n="data-insta-html",o="instagram-embed-script",r="https://www.instagram.com/embed.js",a=()=>window.instgrm&&window.instgrm.Embeds.process();else if(t.matches(".lazy-tiktok-facade"))d="tiktok",n="data-tiktok-html",o="tiktok-embed-script",r="https://www.tiktok.com/embed.js",a=null;else if(t.matches(".lazy-reddit-embed"))d="reddit",n="data-reddit-html",o="reddit-widgets-js",r="https://embed.reddit.com/widgets.js",a=null;else return;if(!d)return;const i=t.getAttribute(n);if(!i)return;try{const s=decodeURIComponent(escape(window.atob(i))),l=document.createElement("div");l.innerHTML=s;const m=l.firstChild;m&&(c.replaceChild(m,t),r&&e(o,r,a))}catch(t){console.error("Error restoring embed for "+d,t)}}document.addEventListener("click",function(c){const e=c.target.closest(".lazy-youtube-embed, .lazy-instagram-embed, .lazy-tweet-facade, .lazy-tiktok-facade, .lazy-reddit-embed");e&&t(e)},!1)})();</script>`;
-
-export const useCleaner = () => {
-  const [isCleaning, setIsCleaning] = useState(false);
-
-  const cleanHtml = useCallback(async (
-      html: string, 
-      options: CleaningOptions, 
-      recommendations: Recommendation[] | null
-  ): Promise<{ cleanedHtml: string, summary: ImpactSummary, effectiveOptions: CleaningOptions }> => {
-    setIsCleaning(true);
-    const actionLog: string[] = [];
-
-    let effectiveOptions = { ...options };
-    if (recommendations) {
-        let appliedAICount = 0;
-        recommendations.forEach(rec => {
-            const title = rec.title.toLowerCase();
-            if (title.includes('lazy load images') && !effectiveOptions.lazyLoadImages) { effectiveOptions.lazyLoadImages = true; appliedAICount++; }
-            if (title.includes('lazy load') && (title.includes('video') || title.includes('embed')) && !effectiveOptions.lazyLoadEmbeds) { effectiveOptions.lazyLoadEmbeds = true; appliedAICount++; }
-            if (title.includes('defer') && title.includes('javascript') && !effectiveOptions.deferScripts) { effectiveOptions.deferScripts = true; appliedAICount++; }
-            if (title.includes('optimize') && title.includes('css') && !effectiveOptions.optimizeCssLoading) { effectiveOptions.optimizeCssLoading = true; appliedAICount++; }
-            if (title.includes('font') && !effectiveOptions.optimizeFontLoading) { effectiveOptions.optimizeFontLoading = true; appliedAICount++; }
-            if ((title.includes('image format') || title.includes('webp')) && !effectiveOptions.optimizeImages) { effectiveOptions.optimizeImages = true; appliedAICount++; }
-        });
-        if(appliedAICount > 0) actionLog.push(`Applied ${appliedAICount} AI recommendation(s).`);
-    }
-
-    const originalBytes = new TextEncoder().encode(html).length;
-    
-    // Pre-emptive removal of old loader scripts
-    const preCleanedHtml = html.replace(/<script[^>]*>[\s\S]*?lazy-youtube-embed[\s\S]*?<\/script>/g, '');
-    
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(preCleanedHtml, 'text/html');
-
-    if (effectiveOptions.semanticRewrite) {
-        const count = doc.querySelectorAll('b, i').length;
-        if (count > 0) {
-            rewriteToSemanticHtml(doc);
-            actionLog.push(`Rewrote ${count} tag(s) to semantic HTML5.`);
-        }
-    }
-    
-    const originalNodeCount = doc.getElementsByTagName('*').length;
-    let hasLazyEmbeds = false;
-    
-    if (effectiveOptions.lazyLoadEmbeds) {
-        processEmbeds(doc, actionLog);
-        if (doc.querySelector('.lazy-youtube-embed, .lazy-tweet-facade, .lazy-instagram-embed, .lazy-tiktok-facade, .lazy-reddit-embed')) {
-            hasLazyEmbeds = true;
-        }
-    }
-
-    if (effectiveOptions.lazyLoadImages) {
-        const images = doc.querySelectorAll('img');
-        let lazyLoadedCount = 0;
-        images.forEach((img, index) => {
-            if (index < 2) {
-                img.setAttribute('loading', 'eager');
-                img.setAttribute('fetchpriority', 'high');
-            } else {
-                if(img.getAttribute('loading') !== 'lazy') {
-                    img.setAttribute('loading', 'lazy');
-                    lazyLoadedCount++;
-                }
-                img.setAttribute('decoding', 'async');
-            }
-        });
-        if (lazyLoadedCount > 0) actionLog.push(`Lazy-loaded ${lazyLoadedCount} image(s).`);
-    }
-
-    if (effectiveOptions.optimizeImages) {
-        let webpCount = 0;
-        let sizedCount = 0;
-        const cdnHosts = ['i0.wp.com', 'i1.wp.com', 'i2.wp.com', 'i3.wp.com', 'cloudinary.com', 'imgix.net'];
-        
-        doc.querySelectorAll('img').forEach(img => {
-            // Add width/height from filename (e.g., image-1024x768.jpg)
-            if (!img.hasAttribute('width') && !img.hasAttribute('height')) {
-                const match = img.src.match(/-(\d+)[xX](\d+)\.(jpg|jpeg|png|webp)/);
-                if (match && match[1] && match[2]) {
-                    img.setAttribute('width', match[1]);
-                    img.setAttribute('height', match[2]);
-                    sizedCount++;
-                }
-            }
-
-            // Convert to WebP via CDN
-            let src = img.getAttribute('src');
-            if (!src || src.includes('.svg') || src.startsWith('data:')) return;
-    
-            try {
-                const url = new URL(src);
-                if (cdnHosts.some(host => url.hostname.includes(host))) {
-                    if(!url.searchParams.has('format')) {
-                        url.searchParams.set('format', 'webp');
-                        img.setAttribute('src', url.toString());
-                        webpCount++;
-                    }
-                }
-            } catch (e) {
-                // Ignore invalid URLs
-            }
-        });
-        if (sizedCount > 0) actionLog.push(`Added dimensions to ${sizedCount} image(s) to prevent layout shift.`);
-        if (webpCount > 0) actionLog.push(`Converted ${webpCount} image(s) to WebP format.`);
-    }
-    
-    if (effectiveOptions.deferScripts) {
-        let deferCount = 0;
-        doc.querySelectorAll('script[src]').forEach(script => {
-            const src = script.getAttribute('src');
-            if (src && (src.toLowerCase().includes('jquery') || src.includes('pageforge-lazy-loader'))) return;
-            if (!script.hasAttribute('defer') && !script.hasAttribute('async')) {
-                 script.setAttribute('defer', '');
-                 deferCount++;
-            }
-        });
-        if (deferCount > 0) actionLog.push(`Deferred ${deferCount} non-essential script(s).`);
-    }
-
-    if (effectiveOptions.optimizeFontLoading) {
-        let fontCount = 0;
-        doc.querySelectorAll('link[href*="fonts.googleapis.com/css"]').forEach(link => {
-            try {
-                const href = link.getAttribute('href');
-                if (!href) return;
-                const url = new URL(href, 'https://example.com');
-                 if (!url.searchParams.has('display')) {
-                    url.searchParams.set('display', 'swap');
-                    link.setAttribute('href', url.toString().replace('https://example.com', ''));
-                    fontCount++;
-                }
-            } catch(e) { console.error("Could not parse font URL", e)}
-        });
-        if (fontCount > 0) actionLog.push(`Optimized ${fontCount} Google Font file(s).`);
-    }
-    
-    if (effectiveOptions.addPrefetchHints) {
-        const processedOrigins = new Set<string>();
-        let hintCount = 0;
-        doc.querySelectorAll('link[href*="fonts.googleapis.com"], link[href*="fonts.gstatic.com"]').forEach(link => {
-            const href = link.getAttribute('href');
-            try {
-                if (!href) return;
-                const url = new URL(href);
-                if (!processedOrigins.has(url.origin)) {
-                    const preconnect = doc.createElement('link');
-                    preconnect.rel = 'preconnect';
-                    preconnect.href = url.origin;
-                    if (url.origin.includes('gstatic')) {
-                        preconnect.setAttribute('crossorigin', '');
-                    }
-                    doc.head.prepend(preconnect);
-                    processedOrigins.add(url.origin);
-                    hintCount++;
-                }
-            } catch (e) { console.warn('Could not parse URL for prefetch hint:', href, e); }
-        });
-        if(hintCount > 0) actionLog.push(`Added ${hintCount} preconnect hint(s) for faster connections.`);
-    }
-
-    if (effectiveOptions.optimizeCssLoading) {
-        let cssCount = 0;
-        doc.querySelectorAll('link[rel="stylesheet"]').forEach(stylesheet => {
-            if (stylesheet.getAttribute('href')?.includes('fonts.googleapis.com')) return;
-            stylesheet.setAttribute('media', 'print');
-            stylesheet.setAttribute('onload', "this.onload=null;this.media='all'");
-            const noscript = doc.createElement('noscript');
-            const fallbackLink = stylesheet.cloneNode(true) as HTMLLinkElement;
-            fallbackLink.removeAttribute('media');
-            fallbackLink.removeAttribute('onload');
-            noscript.appendChild(fallbackLink);
-            stylesheet.parentNode?.insertBefore(noscript, stylesheet.nextSibling);
-            cssCount++;
-        });
-        if(cssCount > 0) actionLog.push(`Deferred ${cssCount} stylesheet(s).`);
-    }
-
-    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_ALL);
-    const nodesToRemove: Node[] = [];
-
-    while (walker.nextNode()) {
-      const node = walker.currentNode;
-      if (!effectiveOptions.lazyLoadEmbeds && effectiveOptions.preserveIframes && node.nodeName.toLowerCase() === 'iframe') continue;
-      if (effectiveOptions.preserveLinks && node.nodeName.toLowerCase() === 'a') continue;
-      if (effectiveOptions.preserveShortcodes && node.nodeType === Node.TEXT_NODE && /\[.*?\]/.test(node.textContent || '')) continue;
-      
-      if (effectiveOptions.stripComments && node.nodeType === Node.COMMENT_NODE) {
-        nodesToRemove.push(node);
-      }
-      if (effectiveOptions.removeEmptyAttributes && node.nodeType === Node.ELEMENT_NODE) {
-        const element = node as Element;
-        const attrsToRemove: string[] = [];
-        for (let i = 0; i < element.attributes.length; i++) {
-          const attr = element.attributes[i];
-          if (attr.value.trim() === '') attrsToRemove.push(attr.name);
-        }
-        attrsToRemove.forEach(attrName => element.removeAttribute(attrName));
-      }
-    }
-
-    if (nodesToRemove.length > 0) {
-        actionLog.push(`Removed ${nodesToRemove.length} unnecessary HTML comment(s).`);
-    }
-    nodesToRemove.forEach(node => {
-        node.parentNode?.removeChild(node);
-    });
-
-    let finalHtml = `<!DOCTYPE html>\n` + doc.documentElement.outerHTML;
-
-    if (effectiveOptions.minifyInlineCSSJS) {
-      finalHtml = finalHtml.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, css) => {
-        const minifiedCss = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(\r\n|\n|\r)/gm, "").replace(/\s+/g, ' ').trim();
-        return `<style>${minifiedCss}</style>`;
-      });
-      finalHtml = finalHtml.replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, (match, js) => {
-        if (match.includes('src=') || match.includes('pageforge-lazy-loader')) return match;
-        const minifiedJs = js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '').replace(/\s+/g, ' ').trim();
-        return `<script>${minifiedJs}</script>`;
-      });
-    }
-
-    if (effectiveOptions.collapseWhitespace) {
-        finalHtml = finalHtml.replace(/>\s+</g, '><').trim();
-    }
-    
-    if (hasLazyEmbeds && !finalHtml.includes('id="pageforge-lazy-loader"')) {
-        finalHtml += lazyLoadScript;
-    }
-
-    const cleanedBytes = new TextEncoder().encode(finalHtml).length;
-    const finalDocForCount = parser.parseFromString(finalHtml, 'text/html');
-    const cleanedNodeCount = finalDocForCount.querySelectorAll('*').length;
-    const nodesRemoved = Math.max(0, originalNodeCount - cleanedNodeCount);
-    const bytesSaved = Math.max(0, originalBytes - cleanedBytes);
-
-    if(bytesSaved > 0) {
-        actionLog.push(`Minified content, saving ${bytesSaved} bytes.`);
-    }
-
-    const summary: ImpactSummary = {
-        originalBytes,
-        cleanedBytes,
-        bytesSaved,
-        nodesRemoved,
-        estimatedSpeedGain: originalBytes > 0 ? `${((bytesSaved / originalBytes) * 100).toFixed(1)}% size reduction` : '0.0% size reduction',
-        actionLog
-    };
-    
-    setIsCleaning(false);
-    return { cleanedHtml: finalHtml, summary, effectiveOptions };
-  }, []);
-
-  return { isCleaning, cleanHtml };
-};
+// Enhanced lazy load script with better performance and hover effects
+const lazyLoadScript = `<script id="pageforge-lazy-loader">(function(){"use strict";if(window.pageforgeLazyLoaderInitialized)return;window.pageforgeLazyLoaderInitialized=!0;function e(e,t,c){const d=document.getElementById(e);if(d)return void(c&&c());const n=document.createElement("script");n.id=e,n.src=t,n.async=!0,c&&(n.onload=c),document.head.appendChild(n)}function addHoverEffects(){document.querySelectorAll('.lazy-tweet-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#1d9bf0';el.style.transform='translateY(-2px)';el.style.boxShadow='0 8px 25px rgba(29,155,240,0.15)';const glow=el.querySelector('.hover-glow');if(glow)glow.style.opacity='0.1';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#2f3349';el.style.transform='translateY(0)';el.style.boxShadow='none';const glow=el.querySelector('.hover-glow');if(glow)glow.style.opacity='0';});});document.querySelectorAll('.lazy-instagram-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.transform='scale(1.02)';el.style.boxShadow='0 10px 30px rgba(240,148,51,0.2)';});el.addEventListener('mouseleave',()=>{el.style.transform='scale(1)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-tiktok-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#fe2c55';el.style.transform='translateY(-3px) scale(1.02)';el.style.boxShadow='0 10px 30px rgba(254,44,85,0.2)';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#25f4ee';el.style.transform='translateY(0) scale(1)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-reddit-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.borderColor='#ff4500';el.style.transform='translateY(-2px)';el.style.boxShadow='0 8px 25px rgba(255,69,0,0.15)';});el.addEventListener('mouseleave',()=>{el.style.borderColor='#343536';el.style.transform='translateY(0)';el.style.boxShadow='none';});});document.querySelectorAll('.lazy-youtube-facade').forEach(el=>{el.addEventListener('mouseenter',()=>{el.style.transform='scale(1.02)';el.style.boxShadow='0 10px 30px rgba(255,0,0,0.2)';});el.addEventListener('mouseleave',()=>{el.style.transform='scale(1)';el.style.boxShadow='none';});});}function t(t){if(t.matches(".lazy-youtube-facade")){const videoId=t.getAttribute('data-video-id');const originalSrc=t.getAttribute('data-original-src');if(!videoId||!originalSrc)return;const d=document.createElement("iframe");const n=new URL(originalSrc.startsWith("//")?("https:"+originalSrc):originalSrc);n.searchParams.set("autoplay","1");n.searchParams.set("rel","0");d.setAttribute("src",n.toString());d.setAttribute("frameborder","0");d.setAttribute("allow","accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");d.setAttribute("allowfullscreen","");d.style.cssText="width:100%;height:100%;border-radius:12px;";const wrapper=document.createElement('div');wrapper.style.cssText="position:relative;width:100%;max-width:"+t.style.maxWidth+";aspect-ratio:"+t.style.aspectRatio+";margin:1rem auto;";wrapper.appendChild(d);t.parentNode?.replaceChild(wrapper,t);return}const c=t.parentNode;if(!c)return;let d,n,o,r,a;if(t.matches(".lazy-tweet-facade"))d="tweet",n="data-tweet-html",o="twitter-wjs",r="https://platform.twitter.com/widgets.js",a=()=>window.twttr&&window.twttr.widgets&&window.twttr.widgets.load(c);else if(t.matches(".lazy-instagram-facade"))d="instagram",n="data-insta-html",o="instagram-embed-script",r="https://www.instagram.com/embed.js",a=()=>window.instgrm&&window.instgrm.Embeds.process();else if(t.matches(".lazy-tiktok-facade"))d="tiktok",n="data-tiktok-html",o="tiktok-embed-script",r="https://www.tiktok.com/embed.js",a=null;else if(t.matches(".lazy-reddit-facade"))d="reddit",n="data-reddit-html",o="reddit-widgets-js",r="https://embed.reddit.com/widgets.js",a=null;else return;if(!d)return;const i=t.getAttribute(n);if(!i)return;try{const s=decodeURIComponent(escape(window.atob(i))),l=document.createElement("div");l.innerHTML=s;const m=l.firstChild;m&&(c.replaceChild(m,t),r&&e(o,r,a))}catch(error){console.error("Error loading social media embed:",error)}}document.addEventListener("click",function(e){const target=e.target.closest(".lazy-youtube-facade, .lazy-tweet-facade, .lazy-instagram-facade, .lazy-tiktok-facade, .lazy-reddit-facade");target&&t(target)});document.addEventListener("DOMContentLoaded",addHoverEffects);addHoverEffects()})();</script>`;
