@@ -1,5 +1,3 @@
-
-
 export interface Session {
   id?: string;
   url: string;
@@ -23,6 +21,7 @@ export interface CleaningOptions {
   semanticRewrite: boolean;
   lazyLoadEmbeds: boolean;
   lazyLoadImages: boolean;
+  optimizeImages: boolean; // New high-impact image optimization
   optimizeCssLoading: boolean;
   optimizeFontLoading: boolean;
   addPrefetchHints: boolean;
